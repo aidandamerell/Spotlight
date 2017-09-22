@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-require 'net/ldap'
+require 'net-ldap'
 require 'tty-command'
 require 'trollop'
 require 'colorize'
