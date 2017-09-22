@@ -43,3 +43,10 @@ This script was created to provide a full LDAP enumeration suite for use of pene
 This function will perform a hashdump using secretsdump (from Impacket: https://github.com/CoreSecurity/impacket) to perform a DCSYNC style hashdump.
 Any function in the script which enumerates users (every function except: enumtrusts and domaincomputers) will allow for the dumping of hashes.
 
+
+## Example Usage
+
+```
+ruby ./spotlight.rb -h 192.168.0.253 -u administrator -p Password1 -d test -g "domain admins" -m
+```
+The above will connect to the host over LDAPS and enumerate the domain admins group, then perform a hashdump of the users in that group. Note ruby at the start of the command as the shebang confuses Kali (but not MacOS).
