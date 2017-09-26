@@ -340,9 +340,9 @@ if opts[:csv]
 
 	unless Computer.all_computers.empty?
 		CSV.open("allcomputers_output.csv", "w+") do |csv|
-			csv << ["Name","OS","DNS","IP"]
+			csv << ["Name","OS", "Service Pack","DNS","IP"]
 			Computer.all_computers.each do |computer|
-				csv << [computer.cn, computer.os, computer.dns, computer.ip]
+				csv << [computer.cn, computer.os, computer.sp, computer.dns, computer.ip]
 			end
 		end
 	end
