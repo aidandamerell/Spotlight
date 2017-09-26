@@ -253,7 +253,7 @@ class User
 end
 
 class Computer
-	attr_accessor :cn, :os, :dns, :ip
+	attr_accessor :cn, :os, :dns, :ip, :sp
 	@@computers = []
 
 	def initialize(entry)
@@ -261,6 +261,7 @@ class Computer
 		@os = entry.operatingsystem.entries.reduce rescue nil
 		@dns = entry.dnshostname.entries.reduce rescue nil
 		@ip = entry.networkaddress.entries.reduce rescue "Not specified"
+		@sp  = entry.operatingsystemservicepack.entries.reduce rescue nil
 		@@computers << self
 	end
 

