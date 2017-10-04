@@ -26,15 +26,14 @@ class Domain
 	end
 
 	def self.relation(cn)
-		puts @@current
-		puts cn
-
+		@@current.downcase!
+		cn.downcase!
 		if cn.include? @@current
 			"Child"
 		elsif @@current.include? cn
 			"Parent"
 		else
-			"not relation, this shouldn't happen"
+			"No relation"
 		end
 	end
 
@@ -108,8 +107,16 @@ class Group
 		@dn = entry.dn
 		@members = member_obj = []
 		@member_objects = nil
-		@admin = entry.admincount.entries.reduce rescue 0
+		@admin = Group.is_admin(entry.admincount.entries.reduce.to_i) rescue false
 		@@groups << self
+	end
+
+	def self.is_admin(value)
+		if value == 1
+			true
+		else
+			false
+		end
 	end
 
 	def self.recursive_memberof(group)
@@ -173,6 +180,11 @@ class User
 		Net::LDAP::Filter.construct("(&(sAMAccountName=#{username}))")
 	end
 
+	def self.find_admin
+		#Huh, neat
+		Net::LDAP::Filter.construct("(&(objectCategory=Person)(admincount=1))")
+	end
+
 	def self.recursive_user_memberof(dn)
 		Net::LDAP::Filter.construct("(member:1.2.840.113556.1.4.1941:=#{dn})")
 	end
@@ -182,6 +194,7 @@ class User
 	end
 
 	def self.hash_type(user)
+		user = user rescue "EMPTY"
 		if user.hash.include? 'aad3b435b51404eeaad3b435b51404ee'
 			user.hash_type = "NTML"
 		else
@@ -195,6 +208,14 @@ class User
 		password = line.split(":")[1]
 		if i = User.all_users.find {|u| u.name == username }
 			i.password = password
+		end
+	end
+
+	def self.all_hash(line)
+		username = line.split(":")[0].split("\\")[1] rescue ""
+		# hash = line.split(":")[2,3].join(":") rescue ""
+		if i = User.all_users.find {|u| u.name == username }
+			i.hash = line
 		end
 	end
 
@@ -273,7 +294,7 @@ class Computer
 		Net::LDAP::Filter.construct("(&(&(objectCategory=computer)))")
 	end
 
-	def self.find_all_workstations #This is an annoying function as it require a NOT statement, which is ugly in Ruby-ldap
+	def self.find_all_workstations #This is an annoying function as it require a NOT statement, which isnt even a ruby not!
 		compfilter = Net::LDAP::Filter.eq("Objectcategory", "Computer")
 		notfilter = ~ Net::LDAP::Filter.eq( "operatingSystem", "Windows Server*" )
 		filter = Net::LDAP::Filter.join(compfilter, notfilter)
