@@ -190,17 +190,17 @@ unless opts[:restore]
 				member_of << memberofs.name
 			end
 			@u = User.new(entry, member_of)
-		 	rows << ["Username", u.name]
-		 	rows << ["Admin", u.admin]
-		 	rows << ["Enabled", u.enabled]
-		 	rows << ["Logon Count", u.logon_count]
-		 	rows << ["Member Of", u.member_of.join(", ")]
-		 	rows << ["Created", u.when_created]
-		 	rows << ["Modified", u.when_changed]
-		 	rows << ["Last Incorrect Password Attempt", u.bad_password_time]
-		 	rows << ["Expires", u.account_expires]
-		 	rows << ["Last Logon", u.last_logon]
-		 	rows << ["Description", u.description]
+		 	rows << ["Username", @u.name]
+		 	rows << ["Admin", @u.admin]
+		 	rows << ["Enabled", @u.enabled]
+		 	rows << ["Logon Count", @u.logon_count]
+		 	rows << ["Member Of", @u.member_of.join(", ")]
+		 	rows << ["Created", @u.when_created]
+		 	rows << ["Modified", @u.when_changed]
+		 	rows << ["Last Incorrect Password Attempt", @u.bad_password_time]
+		 	rows << ["Expires", @u.account_expires]
+		 	rows << ["Last Logon", @u.last_logon]
+		 	rows << ["Description", @u.description]
 		end
 		puts  Terminal::Table.new :rows => rows
 		if @u.nil?
@@ -233,15 +233,24 @@ unless opts[:restore]
 				spinner.spin
 				print (count += 1).to_s.green
 				member_of = []
+				# pp entry
 				## You need to implement a flag to boolean nested and non nested enumeration
-				# ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
-				# 	member_of << memberofs.name
-				# 	spinner.spin
-				# end
+				if !opts[:nonestedmembers]
+					ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
+						member_of << memberofs.name
+						spinner.spin
+					end
+				elsif
+						memberof = entry.memberof rescue nil
+						unless memberof.nil?
+						entry.memberof.to_a.each do |memberofs|
+							member_of << memberofs.split(",")[0].gsub(/CN=/,'')
+						end
+					end
+				end
 				user = User.new(entry, member_of)
 				# puts "Name: #{user.name} - Admin:" + (user.admin ? " Trusere".green : " False".red) + (user.description ? "- Description: #{user.description}".yellow : "- Description: None".green)
-				rows << [user.name, (user.admin ? "True".green : "False".red), (user.description ? "#{user.description}".yellow
-				 : "None".green)]
+				rows << [user.name, (user.admin ? "True".green : "False".red), (user.description ? "#{user.description}".yellow : "None".green)]
 			end
 			spinner.stop("\n[+] Found #{User.all_users.count} users".green)
 			puts  Terminal::Table.new :headings => ["Username", "Admin", "Description"], :rows => rows
@@ -355,8 +364,8 @@ if opts[:csv]
 		CSV.open("users_output.csv", "w+") do |csv|
 			csv << ["Username", "Admin", "Enabled", "Logon Count", "Member of", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password"]
 			User.all_users.each do |user|
-				if user.member_of.empty?
-					member_of = nil
+				if user.member_of.nil? or user.member_of.empty?
+					member_of = []
 				else
 					member_of = user.member_of
 				end
@@ -371,7 +380,7 @@ if opts[:csv]
 					password = user.password
 					hash = user.hash
 				end
-				csv << [user.name, user.admin, user.enabled, user.logon_count, member_of, user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password]
+				csv << [user.name, user.admin, user.enabled, user.logon_count, member_of.join(", "), user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password]
 			end
 		end
 	end
