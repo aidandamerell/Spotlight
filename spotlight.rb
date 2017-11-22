@@ -117,19 +117,26 @@ end
 
 #check LDAP & restore functionality
 unless opts[:restore]
-	begin
-		if ldap_con.bind
-			spinner.stop("[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green)
-			tld = opts[:tld].split("\.").join(",dc=")
-			treebase = "dc=#{opts[:domain]},dc=#{tld}"
+begin
+	if ldap_con.bind
+		puts "LDAP connection successful with credentials #{opts[:username]}:#{opts[:password]}\n".green
+		treebase = "dc=#{opts[:domain]}"
+		if opts[:tld].include? "."
+			#loop to deal with domains like a.b.c.d.e.f
+			opts[:tld].split(".").each do |domain|
+				treebase << ",DC=#{domain}"
+			end
 		else
-			spinner.stop("[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red)
-			exit
+			treebase << ",DC=#{opts[:tld]}"
 		end
-	rescue Net::LDAP::Error => e
-		spinner.stop("[-] Hmm, unable to connect to LDAP/LDAP #{e}".red)
+	else
+		puts "Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
 		exit
 	end
+rescue Net::LDAP::Error => e
+	puts "Hmm, unable to connect to LDAP/LDAP #{e}".red
+	exit
+end
 else
 	YAML.load_file(opts[:restore]).each do |object|
 		if object.is_a? User
