@@ -4,15 +4,16 @@
 
 
 class Domain
-	attr_accessor :name, :cn, :trust_direction, :trust_type, :trust_attributes, :relation 
+	attr_accessor :name, :cn, :trust_direction, :trust_type, :trust_attributes, :relation, :current
 	@@domains = []
 	def initialize(entry)
-		@name = entry.name.reduce.to_s rescue nil
-		@cn = entry.cn.entries.reduce.to_s rescue nil
-		@trust_direction = Domain.trust_direction(entry.trustdirection)
-		@trust_type = Domain.trust_type(entry.trusttype)
-		@trust_attributes = Domain.trust_attributes(entry.trustattributes)
-		@relation = Domain.relation(@cn)
+		@name = "#{entry.name}" rescue nil
+		@cn = "#{entry.cn}" rescue nil
+		@trust_direction = Domain.trust_direction(entry.trustdirection) rescue nil
+		@trust_type = Domain.trust_type(entry.trusttype) rescue nil
+		@trust_attributes = Domain.trust_attributes(entry.trustattributes) rescue nil
+		@relation = Domain.relation(@cn) rescue nil
+		@current = current
 		@@domains << self
 	end
 
@@ -103,7 +104,7 @@ class Group
 	@@group = nil
 
 	def initialize(entry, member_obj)
-		@name = entry.cn.entries.reduce.to_s rescue nil
+		@name = "#{entry.cn}" rescue nil
 		@dn = entry.dn
 		@members = member_obj = []
 		@member_objects = nil
@@ -180,41 +181,35 @@ class User
 		Net::LDAP::Filter.construct("(&(sAMAccountName=#{username}))")
 	end
 
-	def self.find_admin
-		#Huh, neat
-		Net::LDAP::Filter.construct("(&(objectCategory=Person)(admincount=1))")
-	end
-
 	def self.recursive_user_memberof(dn)
-		Net::LDAP::Filter.construct("(member:1.2.840.113556.1.4.1941:=#{dn})")
+		Net::LDAP::Filter.construct("(member:1.2.840.113556.1.4.1941:=#{Net::LDAP::Filter.escape(dn)})")
 	end
 
 	def self.find_all_users
 		Net::LDAP::Filter.construct("(objectCategory=Person)")
 	end
 
-	def self.hash_type(user)
-		user = user rescue "EMPTY"
-		if user.hash.include? 'aad3b435b51404eeaad3b435b51404ee'
-			user.hash_type = "NTML"
+	def self.hash_type(hash)
+		if hash.nil?
+			"EMPTY"
+		elsif hash.include? 'aad3b435b51404eeaad3b435b51404ee'
+			return "NTML"
 		else
 			puts "LM".red
-			user.hash_type = "LM"
+			return "LM"
 		end
 	end
 
 	def self.cracked(line)
-		username = line.split(":")[0].split("\\")[1]
 		password = line.split(":")[1]
-		if i = User.all_users.find {|u| u.name == username }
+		if i = User.all_users.find {|u| line.include? u.name rescue ""}
 			i.password = password
 		end
 	end
 
 	def self.all_hash(line)
-		username = line.split(":")[0].split("\\")[1] rescue ""
-		# hash = line.split(":")[2,3].join(":") rescue ""
-		if i = User.all_users.find {|u| u.name == username }
+		# username = line.split(":")[0].split("\\")[1] rescue ""
+		if i = User.all_users.find {|u| line.include? u.name rescue ""}
 			i.hash = line
 		end
 	end

