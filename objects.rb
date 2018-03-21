@@ -178,7 +178,7 @@ class User
 	end
 
 	def self.find_user(username)
-		Net::LDAP::Filter.construct("(&(sAMAccountName=#{username}))")
+		Net::LDAP::Filter.construct("(&(SAMAccountName=#{username}))")
 	end
 
 	def self.recursive_user_memberof(dn)
@@ -202,14 +202,15 @@ class User
 
 	def self.cracked(line)
 		password = line.split(":")[1]
-		if i = User.all_users.find {|u| line.include? u.name rescue ""}
-			i.password = password
+		if i = User.all_users.find {|u| line.include? u.name rescue next}
+			i.hash = line
+			i.hash_type = User.hash_type(line)
+			i.password = line.split(":")[1]
 		end
 	end
 
 	def self.all_hash(line)
-		# username = line.split(":")[0].split("\\")[1] rescue ""
-		if i = User.all_users.find {|u| line.include? u.name rescue ""}
+		if i = User.all_users.find {|u| line.include? u.name rescue next}
 			i.hash = line
 		end
 	end
