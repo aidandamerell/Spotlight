@@ -7,7 +7,7 @@ class Domain
 	attr_accessor :name, :cn, :trust_direction, :trust_type, :trust_attributes, :relation, :current
 	@@domains = []
 	def initialize(entry)
-		@name = "#{entry.name}" rescue nil
+		@name = "#{entry.name.pop}" rescue nil
 		@cn = "#{entry.cn}" rescue nil
 		@trust_direction = Domain.trust_direction(entry.trustdirection) rescue nil
 		@trust_type = Domain.trust_type(entry.trusttype) rescue nil
@@ -104,7 +104,7 @@ class Group
 	@@group = nil
 
 	def initialize(entry, member_obj)
-		@name = "#{entry.cn}" rescue nil
+		@name = "#{entry.cn.pop}" rescue nil
 		@dn = entry.dn
 		@members = member_obj = []
 		@member_objects = nil
@@ -195,7 +195,7 @@ class User
 		if hash.nil?
 			"EMPTY"
 		elsif hash.include? 'aad3b435b51404eeaad3b435b51404ee'
-			return "NTML"
+			return "NTLM"
 		else
 			puts "LM".red
 			return "LM"

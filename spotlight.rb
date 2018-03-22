@@ -218,8 +218,10 @@ unless opts[:restore]
 	end
 
 	if opts[:enumgroups]
+		puts "Enumerating Groups".green
 		rows = []
 		ldap_con.search( :base => treebase, :filter => Group.find_all_groups()) do |entry|
+			print (".").to_s.green
 			group = Group.new(entry, nil)
 			ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(group)) do |memberofs|
 				group.members << memberofs.name
@@ -289,7 +291,7 @@ unless opts[:restore]
 		Group.find_group(opts[:groupname])
 
 		unless Group.all_groups.empty?
-			puts "Found Group: #{opts[:groupname]}, Objects: #{Group.search_group.members.count}".green
+			puts "Found Group: #{opts[:groupname]}".green
 		else
 			puts "Unable to find group \"#{opts[:groupname]}\", is the TLD correct?".red
 			exit
