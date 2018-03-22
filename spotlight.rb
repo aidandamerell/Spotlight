@@ -71,6 +71,7 @@ opts = Trollop::options do
 	opt :csv, "CSV output", :type => :boolean
 	opt :restore, "Restore from YAML log file", :type => :string
 	opt :redacted, "Output to CSV without sensitive information", :type => :boolean
+	opt :external, "List of usernames from external OSINT", :type => :string
 end
 
 if opts[:findadmins]
@@ -150,6 +151,12 @@ if opts[:cracked]
 		User.cracked(hash)
 	end
 end
+if opts[:external]
+	File.readlines(opts[:external]).each do |username|
+		User.external(username)
+	end
+end
+
 
 
 unless opts[:restore]
@@ -364,7 +371,7 @@ if opts[:csv]
 	puts "Writing CSV Files".green
 	unless User.all_users.empty?
 		CSV.open("users_output.csv", "w+") do |csv|
-			csv << ["Username", "Admin", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of"]
+			csv << ["Username", "Admin", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of", "Found Externally"]
 			User.all_users.each do |user|
 				if user.member_of.nil? or user.member_of.empty?
 					member_of = []
@@ -382,7 +389,7 @@ if opts[:csv]
 					password = user.password
 					hash = user.hash
 				end
-				csv << [user.name, user.admin, user.enabled, user.logon_count, user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password, member_of.join(", ")]
+				csv << [user.name, user.admin, user.enabled, user.logon_count, user.description, user.when_created, user.when_changed, user.pwdlastset, user.bad_password_time, user.account_expires, hash, user.hash_type, password, member_of.join(", "), user.external]
 			end
 		end
 	end
