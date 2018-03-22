@@ -121,8 +121,8 @@ class Group
 	end
 
 	def self.recursive_memberof(group)
-	 	dn =  group.dn
-	 	Net::LDAP::Filter.construct("(&(objectCategory=Person)(sAMAccountName=*)(memberOf:1.2.840.113556.1.4.1941:=#{dn}))")
+		dn = Net::LDAP::Filter.escape(group.dn)
+		Net::LDAP::Filter.construct("(&(objectCategory=Person)(sAMAccountName=*)(memberOf:1.2.840.113556.1.4.1941:=#{dn}))")
 	end
 
 	def self.find_all_groups
@@ -208,6 +208,12 @@ class User
 			i.hash = line
 			i.hash_type = User.hash_type(line)
 			i.password = line.split(":")[1]
+		end
+	end
+
+	def self.external(line)
+		if i = User.all_users.find {|u| line.include? u.name rescue next}
+			i.external = true
 		end
 	end
 

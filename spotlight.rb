@@ -86,6 +86,7 @@ if opts[:all]
 	opts [:enumgroups] = true
 	opts[:csv] = true
 	opts[:domaincomputers] = "all"
+	opts[:nonestedmembers] = true
 end
 
 #create LDAP connections
@@ -191,10 +192,10 @@ unless opts[:restore]
 		ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
 			member_of = []
 			ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
-				if memberofs.name[-1].to_s =~ /Admin/
-					puts memberofs.name[-1]
+				if memberofs.name[-1].to_s =~ /admin/
 					@admin = true
 				end
+				pp @admin
 				member_of << memberofs.name
 			end
 			@u = User.new(entry, member_of)
