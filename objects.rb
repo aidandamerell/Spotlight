@@ -147,6 +147,7 @@ class User
 	#There are a lot of attributes here as we have to pull out lots of crap from LDAP
 	attr_accessor :name, :hash, :hash_type, :member_of, :link, :logon_count, :admin, :description, :password
 	attr_accessor :enabled, :when_created, :when_changed, :bad_password_time, :last_logon, :pwdlastset, :account_expires
+	attr_accessor :external
 	@@users = []
 	@@user_count = 0
 
@@ -161,6 +162,7 @@ class User
 		@admin = User.isadmin(entry)
 		@enabled = User.account_enabled(entry)
 		@description = entry.description.entries.reduce rescue nil
+		@external = false
 		#time related
 		@when_created = User.windows_time_two(entry.whencreated.entries.reduce) rescue nil
 		@when_changed = User.windows_time_two(entry.whenchanged.entries.reduce) rescue nil
