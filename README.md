@@ -15,18 +15,22 @@ This script was created to provide a full LDAP enumeration suite for use of pene
                                exist - E.G. child.parent.local (default: local)
   -g, --groupname=<s>          Name of group to enumerate
   -l, --ldaptype               Use unecrypted LDAP
-  -m, --dumphashes             Dump the groups user hashes, account requires
-                               domain administrative privilege
   -e, --enumgroups             Enumerate groups and member count
   -n, --enumtrusts             Enumerate Active Directory trusts
-  -s, --enumallusers           Enumerate all users on the domain
+  -o, --nonestedmembers        Do not perform Nested Member of
+  -m, --enumallusers           Enumerate all users on the domain
+  -f, --findadmins             Find users who are Admins
   -q, --queryuser=<s>          Query the membership of a single user
-  -o, --domaincomputers=<s>    Find all the domain joined machines (options:
+  -s, --dumphashes             Dump the groups user hashes, account requires
+                               domain administrative privilege
+  -i, --domaincomputers=<s>    Find all the domain joined machines (options:
                                all, workstations, servers, domaincontrollers)
   -c, --cracked=<s>            A list of cracked credentials from which to add
                                to the users output
   -v, --csv                    CSV output
   -r, --restore=<s>            Restore from YAML log file
+  --redacted                   Output to CSV without sensitive information
+  -x, --external=<s>           List of usernames from external OSINT
   --help                       Show this message
 ```
 ## Highlights
@@ -34,7 +38,6 @@ This script was created to provide a full LDAP enumeration suite for use of pene
 - Full user enumeration
 - Targeted Hashdump
 - Detailed CSV output
-- Restore functionality (not fully implemented)
 - Domain joined machine enumeration
 - Domain forest enumeration
 - SPEED
@@ -42,6 +45,18 @@ This script was created to provide a full LDAP enumeration suite for use of pene
 ### Targeted Hashdump
 This function will perform a hashdump using secretsdump (from Impacket: https://github.com/CoreSecurity/impacket) to perform a DCSYNC style hashdump.
 Any function in the script which enumerates users (every function except: enumtrusts and domaincomputers) will allow for the dumping of hashes.
+
+### External OSINT
+This function allows you to provide a list of users which were found from OSINT, this can be useful when identifying which accounts could be easily compromised from an external perspective.
+
+### Domain Computers
+This will query the domain for ALL domain-joined machines, this can then be further filtered dependant on the machine type. A future release will include a DNS resolution module for the names returned.
+
+### Restore
+Whenever SpotLight is run a log file (YAML) is produced which contains all the information which was gatherd. Using this it is possible to create the relevant CSV files based on the data which was collected.
+
+### Cracked Input
+This feature will take output from JohnTheRipper and parse cracked credentials back into a csv file.
 
 
 ## Example Usage
