@@ -1,4 +1,4 @@
-#!/usr/bin/env ruby -W0
+#!/usr/bin/env ruby
 #-W0 as net-ldap tries to warn of certificate mismatch
 #written by Aidan Damerell - 2017
 
@@ -83,7 +83,7 @@ if opts[:all]
 	opts[:enumtrusts] = true
 	opts[:dumphashes] = true
 	opts[:enumallusers] = true
-	opts [:enumgroups] = true
+	opts[:enumgroups] = true
 	opts[:csv] = true
 	opts[:domaincomputers] = "all"
 	opts[:nonestedmembers] = true
@@ -123,9 +123,14 @@ unless opts[:restore]
 	begin
 		if ldap_con.bind
 			puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
-			tld = opts[:tld].split("\.").join(",dc=")
-			treebase = "dc=#{opts[:domain]},dc=#{tld}"
-			puts "Treebase:#{treebase}"
+			ldap_con.search_root_dse.namingcontexts.each do |context|
+				if context.include? "#{opts[:domain]}"
+					if context.split(",")[0] =~ /#{opts[:domain]}/
+						puts @treebase = context.to_s
+					end
+				end
+			end
+			puts "@treebase:#{@treebase}"
 		else
 			puts "[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
 			puts "Tried with #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n"
@@ -146,12 +151,13 @@ else
 		end
 	end
 end
-
+#Takes cracked passwords and feeds them back into Users objects
 if opts[:cracked]
 	File.readlines(opts[:cracked]).each do |hash|
 		User.cracked(hash)
 	end
 end
+#Takes external users and feeds them back into Users objects
 if opts[:external]
 	File.readlines(opts[:external]).each do |username|
 		User.external(username)
@@ -164,11 +170,11 @@ unless opts[:restore]
 
 	if opts[:enumtrusts]
 		puts "Enumerating Domain Trusts...".green
-		ldap_con.search( :base => treebase, :filter => Domain.domain_info) do |entry|
+		ldap_con.search( :base => @treebase, :filter => Domain.domain_info) do |entry|
 			Domain.new(entry)
 			Domain.current(entry)
 		end
-		ldap_con.search( :base => treebase, :filter => Domain.find_trusts) do |entry|
+		ldap_con.search( :base => @treebase, :filter => Domain.find_trusts) do |entry|
 			Domain.new(entry)
 		end
 		if Domain.all_domains.empty?
@@ -188,14 +194,14 @@ unless opts[:restore]
 
 	if opts[:queryuser]
 		puts "Query:#{User.find_user(opts[:queryuser])}"
+		# Group.get_da_group(ldap_con, @treebase)
 		rows = []
-		ldap_con.search( :base => treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
+		ldap_con.search( :base => @treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
 			member_of = []
-			ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
-				if memberofs.name[-1].to_s =~ /admin/
-					@admin = true
-				end
-				pp @admin
+			ldap_con.search( :base => @treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
+				# if memberofs.name[-1].to_s =~ /admin/
+				# 	@admin = true
+				# end
 				member_of << memberofs.name
 			end
 			@u = User.new(entry, member_of)
@@ -220,10 +226,10 @@ unless opts[:restore]
 	if opts[:enumgroups]
 		puts "Enumerating Groups".green
 		rows = []
-		ldap_con.search( :base => treebase, :filter => Group.find_all_groups()) do |entry|
+		ldap_con.search( :base => @treebase, :filter => Group.find_all_groups()) do |entry|
 			print (".").to_s.green
 			group = Group.new(entry, nil)
-			ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(group)) do |memberofs|
+			ldap_con.search( :base => @treebase, :filter => Group.recursive_memberof(group)) do |memberofs|
 				group.members << memberofs.name
 				User.new(memberofs, memberofs.memberof)
 			end
@@ -237,13 +243,13 @@ unless opts[:restore]
 		puts "Hmm, enumerating the whole domain with nested group enumeration...that could take a while, maybe try --nonestedmembers".yellow
 		end
 		rows = []
-			ldap_con.search( :base => treebase, :filter => User.find_all_users) do |entry|
+			ldap_con.search( :base => @treebase, :filter => User.find_all_users) do |entry|
 				print (".").to_s.green
 				member_of = []
 				# pp entry
 				## You need to implement a flag to boolean nested and non nested enumeration
 				if !opts[:nonestedmembers]
-					ldap_con.search( :base => treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
+					ldap_con.search( :base => @treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
 						member_of << memberofs.name
 					end
 				elsif
@@ -272,7 +278,7 @@ unless opts[:restore]
 		elsif opts[:domaincomputers] == "domaincontrollers"
 			filter = Computer.find_all_domaincontrollers
 		end
-		ldap_con.search( :base => treebase, :filter => filter) do |entry|
+		ldap_con.search( :base => @treebase, :filter => filter) do |entry|
 			Computer.new(entry)
 		end
 		Computer.all_computers.each do |computer|
@@ -284,7 +290,7 @@ unless opts[:restore]
 
 
 	if opts[:groupname]
-		ldap_con.search( :base => treebase, :filter => Net::LDAP::Filter.construct("(name=#{opts[:groupname]}))")) do |entry|
+		ldap_con.search( :base => @treebase, :filter => Net::LDAP::Filter.construct("(name=#{opts[:groupname]}))")) do |entry|
 			member_obj = entry.member rescue []
 			Group.new(entry,member_obj)
 		end
@@ -297,7 +303,7 @@ unless opts[:restore]
 			exit
 		end
 		# use the memberof LDAP query to pull back all users and nested users in the group
-		ldap_con.search( :base => treebase, :filter => Group.recursive_memberof(Group.search_group)) do |entry|
+		ldap_con.search( :base => @treebase, :filter => Group.recursive_memberof(Group.search_group)) do |entry|
 			member_of = []
 			entry.memberof.to_a.each do |memberofs|
 				member_of << memberofs.split(",")[0].gsub(/CN=/,'')
@@ -325,10 +331,8 @@ unless opts[:restore]
 			puts "Dumping Hashes...\nHashes:".green
 			User.all_users.uniq! {|user| user.name}
 			unless User.all_users.empty?
-				#Something doesnt work here, needs some work
 				if opts[:enumallusers]
-					# output = ""
-					cmd = TTY::Command.new
+					cmd = TTY::Command.new(printer: :quiet)
 					connection = cmd.run("python /usr/local/bin/secretsdump.py #{opts[:domain]}/#{opts[:username]}\:\"#{opts[:password]}\"\@#{opts[:host]} -just-dc-ntlm")
 					connection.each do |line|
 						if line.include? ":::"
@@ -338,7 +342,7 @@ unless opts[:restore]
 				else
 					User.all_users.each do |user|
 						output = ''
-						cmd = TTY::Command.new(output: output)
+						cmd = TTY::Command.new(output: output, printer: :quiet)
 						#this path is correct in both OSX and Kali
 						connection = cmd.run("python /usr/local/bin/secretsdump.py \'#{opts[:domain]}/#{opts[:username]}\:#{opts[:password]}\'\@#{opts[:host]} -just-dc-ntlm -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
 						if connection.out =~ /\:\:\:$/
@@ -374,7 +378,7 @@ if opts[:csv]
 	puts "Writing CSV Files".green
 	unless User.all_users.empty?
 		CSV.open("users_output.csv", "w+") do |csv|
-			csv << ["Username", "Admin", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of", "Found Externally"]
+			csv << ["Username", "Admin-like", "Enabled", "Logon Count", "Description", "Created", "Changed", "Password Last Changed", "Last bad password attempt", "Expires", "Hash", "Hash Type", "Password", "Member of", "Found Externally"]
 			User.all_users.each do |user|
 				if user.member_of.nil? or user.member_of.empty?
 					member_of = []
