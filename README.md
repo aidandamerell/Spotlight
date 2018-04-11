@@ -11,27 +11,22 @@ This script was created to provide a full LDAP enumeration suite for use of pene
   -u, --username=<s>           Domain Username
   -p, --password=<s>           Domain Password
   -d, --domain=<s>             Domain Name
-  -t, --tld=<s>                Top Level Domain, or any other DN value which
-                               exist - E.G. child.parent.local (default: local)
   -g, --groupname=<s>          Name of group to enumerate
-  -l, --ldaptype               Use unecrypted LDAP
   -e, --enumgroups             Enumerate groups and member count
   -n, --enumtrusts             Enumerate Active Directory trusts
   -o, --nonestedmembers        Do not perform Nested Member of
   -m, --enumallusers           Enumerate all users on the domain
   -f, --findadmins             Find users who are Admins
   -q, --queryuser=<s>          Query the membership of a single user
-  -s, --dumphashes             Dump the groups user hashes, account requires
-                               domain administrative privilege
-  -i, --domaincomputers=<s>    Find all the domain joined machines (options:
-                               all, workstations, servers, domaincontrollers)
-  -c, --cracked=<s>            A list of cracked credentials from which to add
-                               to the users output
+  -s, --dumphashes             Dump the groups user hashes, account requires domain administrative privilege
+  -i, --domaincomputers=<s>    Find all the domain joined machines (options: all, workstations, servers, domaincontrollers)
+  -c, --cracked=<s>            A list of cracked credentials from which to add to the users output
   -v, --csv                    CSV output
   -r, --restore=<s>            Restore from YAML log file
-  --redacted                   Output to CSV without sensitive information
+  -t, --redacted               Output to CSV without sensitive information
   -x, --external=<s>           List of usernames from external OSINT
-  --help                       Show this message
+  -l, --help                   Show this message
+
 ```
 ## Highlights
 - Infinite nested group enumeration
