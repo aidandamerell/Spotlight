@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-#-W0 as net-ldap tries to warn of certificate mismatch
 #written by Aidan Damerell - 2017
 
 require 'net/ldap'
@@ -10,18 +9,18 @@ require 'yaml'
 require 'csv'
 require 'pp'
 require 'terminal-table'
-require_relative './objects.rb' #Allows the require to be determined from where the script runs rather than where the user runs the script
+require_relative './objects.rb'
 
 
-Signal.trap("INT") { 
-  shut_down 
-  exit
+Signal.trap("INT") {
+	shut_down 
+	exit
 }
 
 def shut_down
-  puts "\nShutting down...".light_blue
-  write_logs
-  exit
+	puts "\nShutting down...".light_blue
+	write_logs
+	exit
 end
 
 def write_logs
@@ -45,6 +44,7 @@ banner = <<-EOF
  (     _// '_ /_/_
 __)/)()/(_/(//)/  
   /       _/
+V0.2 : treebase-beta
 EOF
 
 puts banner.light_blue
@@ -56,9 +56,7 @@ opts = Trollop::options do
 	opt :username, "Domain Username", :type => :string
 	opt :password, "Domain Password", :type => :string
 	opt :domain, "Domain Name", :type => :string
-	opt :tld, "Top Level Domain, or any other DN value which exist - E.G. child.parent.local", :type => :string, :default => "local"
 	opt :groupname, "Name of group to enumerate", :type => :string
-	opt :ldaptype, "Use unecrypted LDAP", :type => :boolean
 	opt :enumgroups, "Enumerate groups and member count", :type => :boolean
 	opt :enumtrusts, "Enumerate Active Directory trusts", :type => :boolean
 	opt :nonestedmembers, "Do not perform Nested Member of", :type => :boolean #not implemented
@@ -91,49 +89,61 @@ end
 
 #create LDAP connections
 unless opts[:restore]
-	if opts[:ldaptype]
+	begin
 		ldap_con = Net::LDAP.new(
 			{:host => opts[:host],
-			 :port => 389,
-			  :auth =>
-		    	{ :method => :simple,
-		    	 :username => "#{opts[:domain]}\\#{opts[:username]}",
-		    	  :password => opts[:password] }
-		    	  }
-		    	  )
-	else
-		ldap_con = Net::LDAP.new(
-		{:host => opts[:host],
-	     	:encryption => {
-	        method: :simple_tls,
-	        :tls_options => { verify_mode: OpenSSL::SSL::VERIFY_NONE}, #verify none is to prevent crashing when an IP doesnt match the SSL cert CN
-	      },
-		 :port => 636,
-		  :auth =>
-	    	{ :method => :simple,
-	    	 :username => "#{opts[:domain]}\\#{opts[:username]}",
-	    	  :password => opts[:password] }
-	    	  }
-	    	  )
+				:encryption => {
+				method: :simple_tls,
+				:tls_options => { verify_mode: OpenSSL::SSL::VERIFY_NONE}, #verify none is to prevent crashing when an IP doesnt match the SSL cert CN
+			},
+			:port => 636,
+			:auth =>
+			{:method => :simple,
+				:username => "#{opts[:domain]}\\#{opts[:username]}",
+				:password => opts[:password] }
+			}
+			)
+		ldap_con.bind
+	rescue => e
+		puts "Unable to connect over LDAPS, Reason: #{e}".yellow
+		puts "Would you like to use insecure LDAP? Y/N".yellow
+		print "Choice:".light_blue
+		if gets.chomp == "Y"
+			ldap_con = Net::LDAP.new(
+			{:host => opts[:host],
+			:port => 389,
+			:auth =>
+			{ :method => :simple,
+				:username => "#{opts[:domain]}\\#{opts[:username]}",
+				:password => opts[:password] }
+			}
+			)
+		else
+			puts "Cancelling".green
+			exit
+		end
 	end
 end
 
-#check LDAP & restore functionality
+# check LDAP & restore functionality
 unless opts[:restore]
 	begin
 		if ldap_con.bind
 			puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
 			ldap_con.search_root_dse.namingcontexts.each do |context|
-				if context.include? "#{opts[:domain]}"
-					if context.split(",")[0] =~ /#{opts[:domain]}/
-						puts @treebase = context.to_s
+				if context =~ /#{opts[:domain]}/i
+					if context.split(",")[0] =~ /#{opts[:domain]}/i
+						@treebase = context.to_s
 					end
+				else
+					puts "I'm struggling to find the full domain, please provide it"
+					exit
 				end
 			end
-			puts "@treebase:#{@treebase}"
+			puts "[+] Treebase:#{@treebase}".light_blue
 		else
-			puts "[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}, you need a username, password and domain".red
-			puts "Tried with #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n"
+			puts "[-] Unable to authenticate to LDAP, Error: #{ldap_con.get_operation_result.message}".red
+			puts "[*] Tried with #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".yellow
 			exit
 		end
 	rescue Net::LDAP::Error => e
@@ -165,11 +175,11 @@ if opts[:external]
 end
 
 
-
+#Move this to a its own class at some point
 unless opts[:restore]
 
 	if opts[:enumtrusts]
-		puts "Enumerating Domain Trusts...".green
+		puts "[*] Enumerating Domain Trusts...".green
 		ldap_con.search( :base => @treebase, :filter => Domain.domain_info) do |entry|
 			Domain.new(entry)
 			Domain.current(entry)
@@ -193,7 +203,7 @@ unless opts[:restore]
 	end
 
 	if opts[:queryuser]
-		puts "Query:#{User.find_user(opts[:queryuser])}"
+		puts "[*] Query:#{User.find_user(opts[:queryuser])}"
 		# Group.get_da_group(ldap_con, @treebase)
 		rows = []
 		ldap_con.search( :base => @treebase, :filter => User.find_user(opts[:queryuser])) do |entry|
@@ -224,7 +234,7 @@ unless opts[:restore]
 	end
 
 	if opts[:enumgroups]
-		puts "Enumerating Groups".green
+		puts "[*] Enumerating Groups".green
 		rows = []
 		ldap_con.search( :base => @treebase, :filter => Group.find_all_groups()) do |entry|
 			print (".").to_s.green
@@ -240,14 +250,12 @@ unless opts[:restore]
 
 	if opts[:enumallusers]
 		if !opts[:nonestedmembers]
-		puts "Hmm, enumerating the whole domain with nested group enumeration...that could take a while, maybe try --nonestedmembers".yellow
+		puts "Enumerating the whole domain with nested group enumeration...this could take a while. Maybe try --nonestedmembers".yellow
 		end
 		rows = []
 			ldap_con.search( :base => @treebase, :filter => User.find_all_users) do |entry|
 				print (".").to_s.green
 				member_of = []
-				# pp entry
-				## You need to implement a flag to boolean nested and non nested enumeration
 				if !opts[:nonestedmembers]
 					ldap_con.search( :base => @treebase, :filter => User.recursive_user_memberof(entry.dn)) do |memberofs|
 						member_of << memberofs.name
@@ -261,10 +269,10 @@ unless opts[:restore]
 					end
 				end
 				user = User.new(entry, member_of)
-				# puts "Name: #{user.name} - Admin:" + (user.admin ? " Trusere".green : " False".red) + (user.description ? "- Description: #{user.description}".yellow : "- Description: None".green)
 				rows << [user.name, (user.admin ? "True".green : "False".red), (user.description ? "Exists".yellow : "None".green)]
 			end
-			puts  Terminal::Table.new :headings => ["Username", "Admin", "Description"], :rows => rows
+			puts ""
+			puts Terminal::Table.new :headings => ["Username", "Admin", "Description"], :rows => rows
 	end
 
 	if opts[:domaincomputers]
@@ -297,7 +305,7 @@ unless opts[:restore]
 		Group.find_group(opts[:groupname])
 
 		unless Group.all_groups.empty?
-			puts "Found Group: #{opts[:groupname]}".green
+			puts "[+] Found Group: #{opts[:groupname]}".green
 		else
 			puts "Unable to find group \"#{opts[:groupname]}\", is the TLD correct?".red
 			exit
@@ -337,6 +345,10 @@ unless opts[:restore]
 					connection.each do |line|
 						if line.include? ":::"
 							User.all_hash(line)
+
+						else
+							puts "Not enough privilege, aborting hashdump".red
+							throw :nopriv
 						end
 					end
 				else
@@ -345,17 +357,16 @@ unless opts[:restore]
 						cmd = TTY::Command.new(output: output, printer: :quiet)
 						#this path is correct in both OSX and Kali
 						connection = cmd.run("python /usr/local/bin/secretsdump.py \'#{opts[:domain]}/#{opts[:username]}\:#{opts[:password]}\'\@#{opts[:host]} -just-dc-ntlm -just-dc-user \"#{opts[:domain]}/#{user.name}\"")
-						if connection.out =~ /\:\:\:$/
+						if connection.out =~ /\:\:\:$/ #if the line looks like a LM/NTLM hash
 							user.hash = connection.out.split("\n")[4]
 							user.hash_type = User.hash_type(user.hash)
 							puts user.hash
 						elsif connection.out =~ /[-] ERROR_DS_NAME_ERROR_NOT_FOUND: Name translation/
 							user.hash = "EMPTY"
 							user.hash_type = "EMPTY"
-						else		
-						puts connection.out				
-							# puts "Not enough privilege, aborting hashdump".red
-							# throw :nopriv
+						else
+							puts "Not enough privilege, aborting hashdump".red
+							throw :nopriv
 						end
 					end
 				end
