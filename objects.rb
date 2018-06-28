@@ -262,7 +262,7 @@ module LDAPData
 			@dn = options[:dn] || options[:distinguishedname]
 			@members = [LDAPData.dn_to_human(options[:member])] || []
 			@admincount = options[:admincount]
-			if @name.match(@@regex)
+			if @name.match(@@regex) or @admincount
 				@administrative = true
 			else
 				@administrative = nil

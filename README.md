@@ -1,7 +1,8 @@
 # Spotlight
 
 ## Synopsis
-This script was created to provide a full LDAP enumeration suite for use of penetration tests. It allows for the enumeration of users, groups, forests and computers from an Active Directory LDAP server over either LDAP or LDAPS. Unlike current tools, this tool will enumerate infinite nested members for groups.
+This script was created to provide a full LDAP enumeration suite for objects stored in Active Directory. It allows for the enumeration of users, groups, domain and computers from an Active Directory LDAP server over either LDAPS or LDAP. 
+Unlike current tools, this tool will enumerate infinite nested members for groups which are considered administrative
 
 
 ## Options
