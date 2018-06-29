@@ -381,7 +381,8 @@ if opts[:output]
 	xlsx_object = Axlsx::Package.new
 	wb_object = xlsx_object.workbook
 	puts "writing XLSX output".green
-	swrite(wb_object,"Users",["Name","When Created","Expires","Enabled","Time Since bad password", "Member Of","Hash","Hash Type","Password"], LDAPData::User.all_users, [:@name, :@whencreated, :@accountexpires,:@enabled, :@badpasswordtime, :@memberof, :@hash,:@hash_type, :@password])
+	swrite(wb_object,"Users",["Name","When Created","Expires","Enabled","Time Since bad password", "Member Of","Hash","Hash Type","Password","Found Externally"], LDAPData::User.all_users, [:@name, :@whencreated, :@accountexpires,:@enabled, 
+		:@badpasswordtime, :@memberof, :@hash,:@hash_type, :@password, :@external])
 	swrite(wb_object,"Groups",["Name","Members","Count","DN"], LDAPData::Group.all_groups,[:@name,:@members,:@count,:@dn])
 	swrite(wb_object,"Administrative Groups",["Name","Members","Count","DN"], LDAPData::Group.administrative_groups,[:@name,:@members,:@count,:@dn])
 	swrite(wb_object,"Domains",["Name","Trust Direction","Trust Type","Trust Attributes","Flat name","DN"], LDAPData::Domain.all_domains,[:@name,:@trustdirection,:@trusttype,:@trustattributes, :@flatname, :@dn])
