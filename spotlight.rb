@@ -29,7 +29,7 @@ opts = Trollop::options do
 	opt :all, "Do Everything", :type => :boolean, :short => "-A"
 	opt :queryuser, "Query a single user", :type => :string
 	opt :querygroup, "Query a single group", :type => :string, :short => "-q"
-	# opt :admingroups, "Enumerate common administrative groups", :type => :boolean
+	opt :admingroups, "Enumerate common administrative groups", :type => :boolean
 	opt :enumtrusts, "Enumerate Active Directory trusts", :type => :boolean, :short => "-t"
 	opt :usersandgroups, "Enumerate all users and groups in the domain", :type => :boolean, :short => "-b"
 	opt :hashdump, "Dump the groups user hashes, requires privs", :type => :boolean, :short => "-H"
@@ -312,6 +312,23 @@ if opts[:usersandgroups]
 	if opts[:hashdump] then hashdump(type: 1, array: LDAPData::User.all_users,opts: opts) end
 end
 
+# if opts[:admingroups] and !opts[:usersandgroups]
+# 	puts "Finding admin groups in #{@fqdn} domain\n".green
+# 	LDAPData::Group.administrative_groups.each do |admin_group|
+# 		ldap_con.search( :base => @treebase, :filter => LDAPData.find_one_group(admin_group.name)) do |group|
+# 			@created_group = LDAPData::Group.new(LDAPData.entry_to_hash(group))
+# 			puts "Running nested enumeration on #{@created_group.name}".green
+# 			@created_group.members = []
+# 				ldap_con.search( :base => @treebase, :filter => LDAPData.recursive_group_memberof(@created_group.dn)) do |recurse|
+# 					@created_group.members << user = LDAPData.entry_to_hash(recurse)[:name]
+# 					if opts[:hashdump] then hashdump(type: 0, user: user,opts: opts) end
+# 				end
+# 			end
+# 			@created_group.count = @created_group.members.count
+# 		end
+# 	end
+# end
+
 
 # #Get domain trusts
 if opts[:enumtrusts]
@@ -393,9 +410,11 @@ if opts[:output]
 	else
 		puts "Error writing XLSX".red
 	end
-	File.open("#{@fqdn}_hashdump.txt", "w+") do |f|
-		LDAPData::User.all_users.each do |user|
-			f.puts user.hash
+	if opts[:hashdump] || opts[:restore]
+		File.open("#{@fqdn}_hashdump.txt", "w+") do |file|
+			LDAPData::User.all_users.each do |user|
+				file.puts user.hash
+			end
 		end
 	end
 
