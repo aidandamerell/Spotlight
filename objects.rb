@@ -114,7 +114,7 @@ module LDAPData
 		case type
 			when "domaincontrollers"			
 				return domain_controller = Net::LDAP::Filter.construct("(&(objectCategory=Computer)(userAccountControl:1.2.840.113556.1.4.803:=8192))")
-			when "server"
+			when "servers"
 				return Net::LDAP::Filter.construct("(&(&(objectCategory=computer)(operatingSystem=Windows Server*)))")
 			when "all"
 				return  Net::LDAP::Filter.construct("(&(&(objectCategory=computer)))")
