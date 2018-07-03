@@ -153,7 +153,6 @@ module LDAPData
 			@flatname = options[:flatname] || options[:name]
 			@dn = options[:dn]
 			@cn = options[:cn]
-
 			if options[:current] #If this is the current domain we can grab the password information
 				@lockoutobservationwindow = (options[:lockoutobservationwindow].abs / 600000000)
 				@lockoutduration = (options[:lockoutduration].abs / 600000000)
@@ -166,6 +165,7 @@ module LDAPData
 				@fqdn = @dn.gsub(",DC=",".").sub("DC=","")
 				@current = self
 			else
+				@fqdn = @cn
 				@trustdirection = self.domain_trust_direction(options[:trustdirection])
 				@trusttype = self.domain_trust_type(options[:trusttype])
 				@trustattributes = domain_trust_attributes(options[:trustattributes])
@@ -283,9 +283,9 @@ module LDAPData
 	end
 
 	class User
-		attr_accessor :name, :memberof, :dn, :whencreated, :badpwdcount, :cracked,
+		attr_accessor :name, :memberof, :dn, :whencreated, :badpwdcount, :cracked, :samaccountname,
 		:badpasswordtime, :admincount, :accountexpires, :hash, :hash_type, :description, :enabled, :hash_type,
-		:password
+		:password, :external
 
 		@@users = Array.new
 		#The user object takes a hash of values from an LDAP object
@@ -295,7 +295,8 @@ module LDAPData
 				return #Have a think about this, we dont want to ignore new data if there is more than the existing object
 			end
 
-			@name = options[:name] || options[:samaccountname] #Name will be set on users but not service accounts
+			@name = options[:name] || options[:samaccountname]
+			@samaccountname = options[:samaccountname] #Name will be set on users but not service accounts
 			@dn = options[:dn]
 			@memberof = LDAPData.dn_to_human(options[:memberof])
 			@whencreated = LDAPData.windows_time_two(options[:whencreated])
@@ -320,7 +321,12 @@ module LDAPData
 
 		def self.add_hash(hash)
 			#Format: domain\uid:rid:lmhash:nthash
-			user = @@users.find { |user| user.name == hash.split(":")[0] }
+			if hash.split(":")[0].include? "\\"
+				 username = hash.split(":")[0].split("\\")[1]
+			else
+				username = hash.split(":")[0]
+			end
+			user = @@users.find { |user| user.samaccountname == username }
 			unless user.nil?
 				user.hash = hash
 				user.hash_type = self.password_hash_type(hash)
@@ -330,6 +336,8 @@ module LDAPData
 		def self.password_hash_type(hash)
 			if hash.nil?
 				"EMPTY"
+			elsif hash.include? '31d6cfe0d16ae931b73c59d7e0c089c0'
+				"BLANK"
 			elsif hash.include? 'aad3b435b51404eeaad3b435b51404ee'
 				"NTLM"
 			else
