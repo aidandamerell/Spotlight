@@ -356,9 +356,12 @@ module LDAPData
 
 		def self.cracked(file)
 			file.readlines.each do |line|
-				if user = @@users.find {|user| user.name == line.split(":")[0] }
+				if user = @@users.find {|user| user.samaccountname == line.split(":")[0] }
 					user.cracked = true
 					user.password = line.split(":")[1]
+					if user.hash.nil?
+						user.hash = line
+					end
 				end
 			end	
 		end
