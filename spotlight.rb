@@ -193,11 +193,12 @@ case opts[:restore]
 
 		begin
 			#Get the naming context for the domain
+			#This could do with being more robust. It will set the naming context on the last successful match. If we match more than one naming context we should prompt
 			puts "Querying RootDSE for FQDN...\n".green
 			naming_context = []
 			ldap_con.search_root_dse.namingcontexts.each_with_index do |context, index|
 				naming_context[index] = a_context = context.to_s
-				if a_context.split(",")[0] =~ /#{opts[:domain]}/i
+				if a_context.split(",")[0].gsub("DC=","") =~ /#{opts[:domain]}/i
 					puts "[#{index}] #{a_context}".green
 					@treebase = a_context
 				else

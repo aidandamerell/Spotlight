@@ -369,7 +369,9 @@ module LDAPData
 		def self.redact
 			@@users.each do |user|
 				user.hash = "REDACTED"
-				if user.password
+				if user.hash_type == "BLANK"
+					user.password = "BLANK"
+				elsif user.password
 					user.password = "Cracked"
 				else
 					user.password = "Not Cracked"
