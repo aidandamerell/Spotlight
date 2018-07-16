@@ -258,7 +258,7 @@ if opts[:queryuser]
 		@user = LDAPData::User.new(LDAPData.entry_to_hash(user))
 		@user.memberof = [] #This is to avoid duplications of data as the User object will use the standard member of, which we dont really want
 		ldap_con.search( :base => @treebase, :filter => LDAPData.recursive_user_memberof(@user.dn)) do |group|
-			@user.memberof << LDAPData::Group.new(LDAPData.entry_to_hash(group)).name
+			@user.memberof << LDAPData::Group.new(LDAPData.entry_to_hash(group)).samaccountname
 		end
 	end
 	if opts[:hashdump] then hashdump(type: 0, user: @user,opts: opts) end
@@ -275,7 +275,7 @@ if opts[:querygroup]
 		@group.members = []
 		ldap_con.search( :base => @treebase, :filter => LDAPData.recursive_group_memberof(@group.dn)) do |nested|
 			@user = LDAPData::User.new(LDAPData.entry_to_hash(nested))
-			@group.members << @user.name
+			@group.members << @user.samaccountname
 			if opts[:hashdump] then hashdump(type: 0, user: @user,opts: opts) end
 		end
 		@group.count = @group.members.count #This value is normally set on initialize so I need to update it
@@ -303,7 +303,7 @@ if opts[:usersandgroups]
 			puts "Running nested enumeration on #{@created_group.name}".green
 			@created_group.members = []
 			ldap_con.search( :base => @treebase, :filter => LDAPData.recursive_group_memberof(@created_group.dn)) do |recurse|
-				@created_group.members << LDAPData.entry_to_hash(recurse)[:name]
+				@created_group.members << LDAPData.entry_to_hash(recurse)[:samaccountname]
 			end
 		end
 		@created_group.count = @created_group.members.count
