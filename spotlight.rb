@@ -258,7 +258,7 @@ if opts[:queryuser]
 		@user = LDAPData::User.new(LDAPData.entry_to_hash(user))
 		@user.memberof = [] #This is to avoid duplications of data as the User object will use the standard member of, which we dont really want
 		ldap_con.search( :base => @treebase, :filter => LDAPData.recursive_user_memberof(@user.dn)) do |group|
-			@user.memberof << LDAPData::Group.new(LDAPData.entry_to_hash(group)).samaccountname
+			@user.memberof << LDAPData::Group.new(LDAPData.entry_to_hash(group)).name
 		end
 	end
 	if opts[:hashdump] then hashdump(type: 0, user: @user,opts: opts) end
