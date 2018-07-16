@@ -128,11 +128,11 @@ module LDAPData
 	def self.dn_to_human(cn)
 		#where cn is a string or array of strings, take the first CN=
 		if cn.is_a? String
-			return cn.split(",CN=")[0].gsub("CN=","")
+			return cn.split(",")[0].gsub("CN=","")
 		elsif cn.is_a? Array
 			array = []
 			cn.each do |string|
-				array << string.split(",CN=")[0].gsub("CN=","")
+				array << string.split(",")[0].gsub("CN=","")
 			end
 			return array
 		end
