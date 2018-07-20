@@ -412,8 +412,8 @@ module LDAPData
 
 		def self.resolver(resolver, name)
 			return (resolver.getaddress "#{name}").to_s
-		rescue Resolv::ResolvError => e
-			return e
+		rescue Resolv::ResolvError
+			return "Unable to Resolve"
 		end
 	end
 end
