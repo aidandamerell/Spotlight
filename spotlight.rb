@@ -10,7 +10,11 @@ require 'yaml'
 require 'resolv'
 require 'axlsx'
 require_relative './objects.rb'
+require 'graphviz'
+#for dev only
 require 'pp'
+require 'threadify'
+
 
 banner = <<-EOF
   __               
@@ -83,7 +87,7 @@ end
 
 ##Shutdown
 def shutdown
-	Puts "Exiting...".red
+	puts "Exiting...".red
 	exit
 end
 
@@ -251,6 +255,8 @@ case opts[:restore]
 		@fqdn = LDAPData::Domain.current.fqdn
 end
 
+LDAPData::Domain.new({name:"Test",trustdirection: 1, cn: "test.local"})
+Output.png(LDAPData::Domain.all_domains)
 #Get indivual user
 if opts[:queryuser]
 	puts "Querying user: #{opts[:queryuser]}".green
@@ -294,6 +300,7 @@ if opts[:usersandgroups]
 	opts[:output] = true
 	puts "Finding all users in #{@fqdn} domain".green
 	ldap_con.search( :base => @treebase, :filter => LDAPData.find_all_users) do |user|
+		printf "."
 		LDAPData::User.new(LDAPData.entry_to_hash(user))
 	end
 	puts "Finding all groups in #{@fqdn} domain\n".green
@@ -370,6 +377,7 @@ if opts[:kerberoast]
 end
 
 if opts[:cracked]
+	puts "Reading Cracked Passwords: #{opts[:cracked]}".green
 	LDAPData::User.cracked(File.open(opts[:cracked]))
 end
 if opts[:external]

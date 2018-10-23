@@ -177,6 +177,10 @@ module LDAPData
 			self.all_domains.find {|i| i.current }
 		end
 
+		def current?
+			self.current
+		end
+
 		def domain_trust_direction(direction)
 			case direction
 				when 1
@@ -355,15 +359,18 @@ module LDAPData
 		end
 
 		def self.cracked(file)
-			file.readlines.each do |line|
-				if user = @@users.find {|user| user.samaccountname == line.split(":")[0] }
+			file.readlines.threadify(10) { |line|
+				if user = @@users.find {|user| user.samaccountname == line.split(":")[0] || user.samaccountname == line.split(":")[0].split("\\")[1] }
+					printf "."
 					user.cracked = true
 					user.password = line.split(":")[1]
 					if user.hash.nil?
 						user.hash = line
 					end
+				else
+					puts "unfound hash: #{line}".red
 				end
-			end	
+			}
 		end
 
 		def self.redact
@@ -415,5 +422,49 @@ module LDAPData
 		rescue Resolv::ResolvError
 			return "Unable to Resolve"
 		end
+	end
+end
+
+class Output
+	#A class to handle output
+	def self.png(domain_array)
+		#A function to create a PNG output of the domain trusts
+		graph = GraphViz.new( :G, :type => :digraph ) #Create our graph
+		# graph[:truecolor => true, :bgcolor => "transparent", :rankdir => "LR"]
+		# graph.node[:label => "\N"]
+		# cur = graph.add_nodes(LDAPData::Domain.current.fqdn)
+		cur = graph.add_nodes(LDAPData::Domain.current.fqdn)
+
+		domain_array.each do |domain|
+			unless domain.current?
+
+				case domain.trusttype #This might need to be an if, if the attribute is an array
+					when "Not transitive"
+						color = ""
+					when "Only 2000 & Above can use this trust"
+					when "SID Filtering Enabled"
+					when "Forest Trust"
+					when "Cross-org” trust with selective authentication enabled"
+					when "Forest-internal"
+					when "This is a forest trust with SIDHistory enabled"
+				end
+					
+				case domain.trustdirection
+					when "Inbound"
+						graph.add_edges(cur, graph.add_nodes( domain.fqdn ), color: color)
+					when "Outbound"
+
+					when "Bidirectional"
+
+					when "default"
+
+				end
+			end 
+		end
+		#   c2 = graph.subgraph { |c|
+		# 	c.mysite[:label => "Legend", :shape => "plaintext"]
+		# 	}
+
+		graph.output( :png => "domain.png" )
 	end
 end
