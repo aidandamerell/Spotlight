@@ -158,101 +158,101 @@ def password_policy_output(wb_object, data)
 end
 
 case opts[:restore]
-	when nil
-		begin
+when nil
+	begin
+		ldap_con = Net::LDAP.new(
+			{:host => opts[:host],
+				:encryption => 
+					{ method: :simple_tls, :tls_options => { verify_mode: OpenSSL::SSL::VERIFY_NONE},
+				},
+				:port => 636,
+				:auth => {:method => :simple, :username => "#{opts[:domain]}\\#{opts[:username]}", :password => "#{opts[:password]}" }
+			}
+			)
+		ldap_con.bind
+	rescue Net::LDAP::Error => e
+		puts "Unable to connect over LDAPS, Reason: #{e}".yellow
+		puts "Would you like to use insecure LDAP? Y/N".yellow
+		print "Choice:".light_blue
+		if gets.chomp.downcase == "y"
+			#Insecure LDAP
 			ldap_con = Net::LDAP.new(
-				{:host => opts[:host],
-					:encryption => 
-						{ method: :simple_tls, :tls_options => { verify_mode: OpenSSL::SSL::VERIFY_NONE},
-					},
-					:port => 636,
-					:auth => {:method => :simple, :username => "#{opts[:domain]}\\#{opts[:username]}", :password => "#{opts[:password]}" }
-				}
-				)
-			ldap_con.bind
-		rescue Net::LDAP::Error => e
-			puts "Unable to connect over LDAPS, Reason: #{e}".yellow
-			puts "Would you like to use insecure LDAP? Y/N".yellow
-			print "Choice:".light_blue
-			if gets.chomp.downcase == "y"
-				#Insecure LDAP
-				ldap_con = Net::LDAP.new(
-				{:host => opts[:host], :port => 389,
-				:auth => { :method => :simple, :username => "#{opts[:domain]}\\#{opts[:username]}", :password => "#{opts[:password]}" }})
+			{:host => opts[:host], :port => 389,
+			:auth => { :method => :simple, :username => "#{opts[:domain]}\\#{opts[:username]}", :password => "#{opts[:password]}" }})
+		else
+			puts "Cancelling".green
+			shutdown
+		end
+	end
+
+	begin
+		#Check that the connection bound to LDAP
+		if ldap_con.bind
+			puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
+		end
+	rescue Net::LDAP::Error => e
+		puts "[-] Hmm, unable to connect to LDAP/LDAP #{e}".red
+		# shut_down
+	end
+
+	begin
+		#Get the naming context for the domain
+		#This could do with being more robust. It will set the naming context on the last successful match. If we match more than one naming context we should prompt
+		puts "Querying RootDSE for FQDN...\n".green
+		naming_context = []
+		ldap_con.search_root_dse.namingcontexts.each_with_index do |context, index|
+			naming_context[index] = a_context = context.to_s
+			if a_context.split(",")[0].gsub("DC=","") =~ /#{opts[:domain]}/i
+				puts "[#{index}] #{a_context}".green
+				@treebase = a_context
 			else
-				puts "Cancelling".green
-				shutdown
+				puts "[#{index}] #{a_context}".red
 			end
 		end
-
-		begin
-			#Check that the connection bound to LDAP
-			if ldap_con.bind
-				puts "[+] LDAP connection successful with credentials: #{opts[:domain]}\\#{opts[:username]}:#{opts[:password]}\n".green
-			end
-		rescue Net::LDAP::Error => e
-			puts "[-] Hmm, unable to connect to LDAP/LDAP #{e}".red
-			# shut_down
+		#Check the treebase was set and if not query the user for it
+		if @treebase
+			puts "\nTreebase found: #{@treebase}".green
+			#create a FQDN from the treebase to use in kerberoasting and hashdumping
+			@fqdn = @treebase.gsub(",DC=",".").sub("DC=","")
+			puts "FQDN Enumerated: #{@fqdn}".green
+		else
+			print "Unable to find, please choose using above numbers:".yellow
+			@treebase = naming_context[gets.chomp.to_i]
 		end
 
-		begin
-			#Get the naming context for the domain
-			#This could do with being more robust. It will set the naming context on the last successful match. If we match more than one naming context we should prompt
-			puts "Querying RootDSE for FQDN...\n".green
-			naming_context = []
-			ldap_con.search_root_dse.namingcontexts.each_with_index do |context, index|
-				naming_context[index] = a_context = context.to_s
-				if a_context.split(",")[0].gsub("DC=","") =~ /#{opts[:domain]}/i
-					puts "[#{index}] #{a_context}".green
-					@treebase = a_context
-				else
-					puts "[#{index}] #{a_context}".red
-				end
-			end
-			#Check the treebase was set and if not query the user for it
-			if @treebase
-				puts "\nTreebase found: #{@treebase}".green
-				#create a FQDN from the treebase to use in kerberoasting and hashdumping
-				@fqdn = @treebase.gsub(",DC=",".").sub("DC=","")
-				puts "FQDN Enumerated: #{@fqdn}".green
-			else
-				print "Unable to find, please choose using above numbers:".yellow
-				@treebase = naming_context[gets.chomp.to_i]
-			end
+	rescue => e
+		puts "Error: #{e}".red
+		puts "Please check your credentials, exiting".red
+		shut_down
+	end
 
-		rescue => e
-			puts "Error: #{e}".red
-			puts "Please check your credentials, exiting".red
-			shut_down
-		end
+	puts "Enumerating domain: #{@fqdn}\n".green
+	ldap_con.search( :base => @treebase, :filter => LDAPData.current_domain_info) do |domain|
+		current = LDAPData.entry_to_hash(domain)
+		current[:current] = true
+		LDAPData::Domain.new(current)
+		output(LDAPData::Domain.current)
+	end
 
-		puts "Enumerating domain: #{@fqdn}\n".green
-		ldap_con.search( :base => @treebase, :filter => LDAPData.current_domain_info) do |domain|
-			current = LDAPData.entry_to_hash(domain)
-			current[:current] = true
-			LDAPData::Domain.new(current)
-			output(LDAPData::Domain.current)
+when opts[:restore]
+	#Logic to repopulate each data object from YAML data
+	puts "Reading YAML: #{opts[:restore]}".light_blue
+	YAML.load_file(opts[:restore]).each do |object|
+		if object.is_a? LDAPData::User
+			LDAPData::User.all_users << object
+		elsif object.is_a? LDAPData::Group
+			LDAPData::Group.all_groups << object
+		elsif object.is_a? LDAPData::Computer
+			LDAPData::Computer.all_computers << object
+		elsif object.is_a? LDAPData::Domain
+			LDAPData::Domain.all_domains << object
 		end
-
-	when opts[:restore]
-		#Logic to repopulate each data object from YAML data
-		puts "Reading YAML: #{opts[:restore]}".light_blue
-		YAML.load_file(opts[:restore]).each do |object|
-			if object.is_a? LDAPData::User
-				LDAPData::User.all_users << object
-			elsif object.is_a? LDAPData::Group
-				LDAPData::Group.all_groups << object
-			elsif object.is_a? LDAPData::Computer
-				LDAPData::Computer.all_computers << object
-			elsif object.is_a? LDAPData::Domain
-				LDAPData::Domain.all_domains << object
-			end
-		end
-		puts "Users: #{LDAPData::User.all_users.count}"
-		puts "Groups: #{LDAPData::Group.all_groups.count}"
-		puts "Computers: #{LDAPData::Computer.all_computers.count}"
-		puts "Domains: #{LDAPData::Domain.all_domains.count}"
-		@fqdn = LDAPData::Domain.current.fqdn
+	end
+	puts "Users: #{LDAPData::User.all_users.count}"
+	puts "Groups: #{LDAPData::Group.all_groups.count}"
+	puts "Computers: #{LDAPData::Computer.all_computers.count}"
+	puts "Domains: #{LDAPData::Domain.all_domains.count}"
+	@fqdn = LDAPData::Domain.current.fqdn
 end
 
 LDAPData::Domain.new({name:"Test",trustdirection: 1, cn: "test.local"})
@@ -392,7 +392,7 @@ if opts[:redacted]
 end
 
 #Restore functionality, write all object arrays to YAML
-unless opts[:restore]
+unless opts[:restore] && !opts[:cracked]
 	begin
 		puts "\nWriting YAML files for logs".green
 		array = [ LDAPData::Group.all_groups, LDAPData::User.all_users, LDAPData::Domain.all_domains, LDAPData::Computer.all_computers]

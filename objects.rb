@@ -359,7 +359,7 @@ module LDAPData
 		end
 
 		def self.cracked(file)
-			file.readlines.threadify(10) { |line|
+			file.readlines.threadify(20) { |line|
 				if user = @@users.find {|user| user.samaccountname == line.split(":")[0] || user.samaccountname == line.split(":")[0].split("\\")[1] }
 					printf "."
 					user.cracked = true
@@ -374,12 +374,17 @@ module LDAPData
 		end
 
 		def self.redact
+			@password_length = LDAPData::Domain.current.minpwdlength
 			@@users.each do |user|
 				user.hash = "REDACTED"
 				if user.hash_type == "BLANK"
 					user.password = "BLANK"
 				elsif user.password
-					user.password = "Cracked"
+					if user.password.length < @password_length
+						user.password = "Cracked (Less than Domain minimum)"
+					else
+						user.password = "Cracked"
+					end
 				else
 					user.password = "Not Cracked"
 				end
