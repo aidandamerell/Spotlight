@@ -10,10 +10,10 @@ require 'yaml'
 require 'resolv'
 require 'axlsx'
 require_relative './objects.rb'
-require 'graphviz'
+# require 'graphviz'
 #for dev only
-require 'pp'
-require 'threadify'
+# require 'pp'
+# require 'threadify'
 
 
 banner = <<-EOF
