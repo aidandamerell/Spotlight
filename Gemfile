@@ -1,9 +1,12 @@
-#Gems
+# frozen_string_literal: true
 
-source "https://rubygems.org"
+# Gems
 
-gem 'net-ldap'
-gem 'tty-command'
-gem 'trollop'
-gem 'colorize'
+source 'https://rubygems.org'
+
 gem 'axlsx'
+gem 'colorize'
+gem 'net-ldap'
+gem 'optimist'
+gem 'tty-command'
+gem 'tty-which'
