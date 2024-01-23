@@ -7,8 +7,12 @@ GEM
       rubyzip (~> 1.0.0)
     colorize (1.1.0)
     htmlentities (4.3.4)
-    net-ldap (0.18.0)
-    nokogiri (1.15.4-arm64-darwin)
+    mini_portile2 (2.8.5)
+    net-ldap (0.19.0)
+    nokogiri (1.16.0)
+      mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
+    nokogiri (1.16.0-arm64-darwin)
       racc (~> 1.4)
     optimist (3.1.0)
     pastel (0.8.0)
@@ -22,6 +26,7 @@ GEM
 
 PLATFORMS
   arm64-darwin-22
+  ruby
 
 DEPENDENCIES
   axlsx
@@ -32,4 +37,4 @@ DEPENDENCIES
   tty-which
 
 BUNDLED WITH
-   2.3.26
+   2.4.21

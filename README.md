@@ -11,7 +11,7 @@ Unlike current tools, this tool will enumerate infinite nested members for group
 
 ```
 $ cd /path/to/spotlight
-$ apt-get install ruby-dev build-essentials patch zlib1g-dev
+$ apt-get install ruby-dev build-essential patch zlib1g-dev
 $ gem install bundler
 $ bundle install
 ```

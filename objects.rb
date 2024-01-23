@@ -320,12 +320,10 @@ module LDAPData
     def add_members(users)
       # Take the collector of users, search the User class for each user and return if we have that user as a "User"
       collection = []
-      # binding.pry
       if users.is_a? String
         collection << User.all_users.select { |i| i.dn == users }.first
       elsif users.is_a? Array
         users.each do |user|
-          # binding.pry
           if (i = User.all_users.select { |i| i.dn == user }.first)
             collection << i
           else

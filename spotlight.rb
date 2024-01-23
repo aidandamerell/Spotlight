@@ -8,7 +8,6 @@ $VERBOSE = nil # This just prevent certificate errors being thrown if we connect
 require 'io/console'
 require 'yaml'
 require 'resolv'
-require 'pry'
 
 # Let Bundler load our deps and check for the correct version
 require 'bundler/setup'
