@@ -1,6 +1,7 @@
 # Spotlight
 
 ## Synopsis
+
 This script was created to provide a full LDAP enumeration suite for objects stored in Active Directory. It allows for the enumeration of users, groups, domain and computers from an Active Directory LDAP server over either LDAPS or LDAP. 
 Unlike current tools, this tool will enumerate infinite nested members for groups which are considered administrative
 
@@ -71,19 +72,24 @@ $ bundle install
 - Domain forest enumeration
 
 ### Targeted Hashdump
+
 This function will perform a hashdump using secretsdump (from Impacket: https://github.com/CoreSecurity/impacket) to perform a DCSYNC style hashdump.
 Any function in the script which enumerates users (every function except: enumtrusts and domaincomputers) will allow for the dumping of hashes.
 
 ### External OSINT
+
 This function allows you to provide a list of users which were found from OSINT, this can be useful when identifying which accounts could be easily compromised from an external perspective.
 
 ### Domain Computers
+
 This will query the domain for ALL domain-joined machines, this can then be further filtered dependant on the machine type. The FQDN for the host will then be used to perform a DNS resolution.
 
 ### Restore
+
 Whenever SpotLight is run a log file (YAML) is produced which contains all the information which was gathered. Using this it is possible to create the relevant Excel files based on the data which was collected.
 
 ### Cracked Input
+
 This feature will take output from JohnTheRipper and parse cracked credentials back into a Excel file.
 
 
